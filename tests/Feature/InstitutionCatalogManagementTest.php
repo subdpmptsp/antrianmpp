@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class InstitutionCatalogManagementTest extends TestCase
@@ -32,6 +33,7 @@ class InstitutionCatalogManagementTest extends TestCase
         ]);
 
         $this->assertSame('instansi-logos/logo-uji.webp', $institution->logo_path);
+        $this->assertSame('/storage/instansi-logos/logo-uji.webp', Storage::disk('public')->url($institution->logo_path));
     }
 
     public function test_catalog_normalization_applies_approved_corrections(): void
