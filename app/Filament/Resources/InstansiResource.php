@@ -9,8 +9,6 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Select;
 
 class InstansiResource extends Resource
 {
@@ -36,23 +34,55 @@ class InstansiResource extends Resource
 
     public static function form(Form $form): Form
     {
-    return $form
-        ->schema([
-            TextInput::make('nama_instansi')
-                ->label('Nama Instansi')
-                ->required(),
-        ]);
+        return $form
+            ->schema([
+                Forms\Components\FileUpload::make('logo_path')
+                    ->label('Logo Instansi untuk Kiosk')
+                    ->helperText('Gunakan PNG, JPG, atau WebP. Maksimal 2 MB.')
+                    ->image()
+                    ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/webp'])
+                    ->disk('public')
+                    ->directory('instansi-logos')
+                    ->visibility('public')
+                    ->maxSize(2048)
+                    ->imagePreviewHeight('140')
+                    ->openable()
+                    ->downloadable()
+                    ->deletable()
+                    ->columnSpanFull(),
+                Forms\Components\TextInput::make('nama_instansi')
+                    ->label('Nama Instansi')
+                    ->required()
+                    ->maxLength(255),
+                Forms\Components\Select::make('counter_id')
+                    ->label('Zona Internal')
+                    ->relationship('counter', 'name')
+                    ->searchable()
+                    ->preload(),
+                Forms\Components\Textarea::make('deskripsi')
+                    ->label('Deskripsi')
+                    ->rows(3)
+                    ->columnSpanFull(),
+            ])
+            ->columns(2);
     }
 
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
+                Tables\Columns\ImageColumn::make('logo_path')
+                    ->label('Logo')
+                    ->disk('public')
+                    ->square(),
                 Tables\Columns\TextColumn::make('nama_instansi')
                     ->label('Nama Instansi')
                     ->searchable()
                     ->sortable(),
-
+                Tables\Columns\TextColumn::make('counter.name')
+                    ->label('Zona Internal')
+                    ->placeholder('Belum ditentukan')
+                    ->sortable(),
             ])
             ->filters([
                 //

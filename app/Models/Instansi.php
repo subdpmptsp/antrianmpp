@@ -17,7 +17,7 @@ class Instansi extends Model
 
     protected $keyType = 'int';
     
-    protected $fillable = ['nama_instansi', 'deskripsi', 'counter_id'];
+    protected $fillable = ['nama_instansi', 'deskripsi', 'logo_path', 'counter_id'];
 
     public function counter()
     {
