@@ -10,6 +10,7 @@ use App\Http\Controllers\AudioController;
 use App\Http\Controllers\BarcodeController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\PublicQueueKioskController;
+use App\Http\Controllers\QueuePrintController;
 use App\Http\Controllers\StrukController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TvDisplayController;
@@ -62,6 +63,16 @@ Route::get('/tickets/{queue}/pdf', [TicketController::class, 'queuePdf'])
 Route::get('/struk/generate', [StrukController::class, 'generateStruk'])
     ->middleware('signed')
     ->name('struk.generate');
+
+Route::get('/tickets/{queue}/print', [StrukController::class, 'printTicket'])
+    ->middleware('signed:relative')
+    ->name('tickets.print');
+Route::post('/tickets/{queue}/print/confirm', [QueuePrintController::class, 'confirm'])
+    ->middleware(['signed:relative', 'throttle:30,1'])
+    ->name('tickets.print.confirm');
+Route::post('/tickets/{queue}/print/fail', [QueuePrintController::class, 'fail'])
+    ->middleware(['signed:relative', 'throttle:30,1'])
+    ->name('tickets.print.fail');
 
 Route::middleware(['auth', 'admin'])->group(function (): void {
     Route::get('/struk/preview', [StrukController::class, 'previewStruk'])->name('struk.preview');

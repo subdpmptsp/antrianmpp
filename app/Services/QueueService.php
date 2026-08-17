@@ -12,7 +12,57 @@ class QueueService
 {
     public function addQueue(int $serviceId): Queue
     {
-        return DB::transaction(function () use ($serviceId) {
+        return $this->createQueue($serviceId, Queue::STATUS_WAITING);
+    }
+
+    public function reserveQueueForPrinting(int $serviceId): Queue
+    {
+        $this->expireStalePrintReservations();
+
+        return $this->createQueue($serviceId, Queue::STATUS_PRINTING);
+    }
+
+    public function confirmPrintedQueue(Queue $queue): bool
+    {
+        if ($queue->status === Queue::STATUS_WAITING) {
+            return true;
+        }
+
+        return Queue::query()
+            ->whereKey($queue->id)
+            ->where('status', Queue::STATUS_PRINTING)
+            ->update(['status' => Queue::STATUS_WAITING]) === 1;
+    }
+
+    public function failPrintingQueue(Queue $queue): bool
+    {
+        if ($queue->status === Queue::STATUS_CANCELED) {
+            return true;
+        }
+
+        return Queue::query()
+            ->whereKey($queue->id)
+            ->where('status', Queue::STATUS_PRINTING)
+            ->update([
+                'status' => Queue::STATUS_CANCELED,
+                'canceled_at' => now(),
+            ]) === 1;
+    }
+
+    public function expireStalePrintReservations(int $minutes = 2): int
+    {
+        return Queue::query()
+            ->where('status', Queue::STATUS_PRINTING)
+            ->where('updated_at', '<', now()->subMinutes($minutes))
+            ->update([
+                'status' => Queue::STATUS_CANCELED,
+                'canceled_at' => now(),
+            ]);
+    }
+
+    private function createQueue(int $serviceId, string $status): Queue
+    {
+        return DB::transaction(function () use ($serviceId, $status) {
             $service = Service::query()
                 ->where('is_active', true)
                 ->lockForUpdate()
@@ -21,7 +71,7 @@ class QueueService
             return Queue::create([
                 'service_id' => $service->id,
                 'number' => $this->generateNumberForService($service),
-                'status' => Queue::STATUS_WAITING,
+                'status' => $status,
             ]);
         });
     }

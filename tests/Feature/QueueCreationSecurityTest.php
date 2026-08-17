@@ -6,7 +6,6 @@ use App\Models\Counter;
 use App\Models\Instansi;
 use App\Models\Queue;
 use App\Models\Service;
-use App\Services\KioskCatalogService;
 use App\Services\QueueService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -27,52 +26,68 @@ class QueueCreationSecurityTest extends TestCase
         $this->assertDatabaseCount('queues', 0);
     }
 
-    public function test_post_request_creates_exactly_one_queue_and_redirects_with_queue_id(): void
+    public function test_post_request_reserves_exactly_one_queue_and_confirmation_activates_it(): void
     {
         $service = $this->createService();
         $token = 'valid-queue-request-token';
 
-        $response = $this->withSession(['queue_request_token' => $token])->post(route('public.queue-kiosk.select-service', [
-            'serviceId' => $service->id,
-            'zona' => 1,
-        ]), ['queue_request_token' => $token]);
+        $response = $this->withSession(['queue_request_token' => $token])
+            ->postJson(route('public.queue-kiosk.select-service', $service), [
+                'queue_request_token' => $token,
+                'instansi_id' => $service->instansi_id,
+            ]);
 
         $queue = Queue::query()->sole();
 
-        $response->assertRedirect();
-        $this->assertStringContainsString('queue_id='.$queue->id, $response->headers->get('Location'));
+        $response->assertCreated()
+            ->assertJsonPath('queue_id', $queue->id)
+            ->assertJsonStructure(['print_url', 'confirm_url', 'fail_url']);
         $this->assertSame('T-001', $queue->number);
-        $this->assertSame('waiting', $queue->status);
+        $this->assertSame(Queue::STATUS_PRINTING, $queue->status);
         $response->assertHeader('X-RateLimit-Limit', '30');
+
+        $this->post($response->json('confirm_url'))
+            ->assertOk()
+            ->assertJsonPath('confirmed', true);
+        $this->assertDatabaseHas('queues', [
+            'id' => $queue->id,
+            'status' => Queue::STATUS_WAITING,
+        ]);
     }
 
     public function test_replaying_the_same_ticket_request_does_not_create_another_queue(): void
     {
         $service = $this->createService();
         $token = 'single-use-queue-request-token';
-        $url = route('public.queue-kiosk.select-service', ['serviceId' => $service->id, 'zona' => 1]);
+        $url = route('public.queue-kiosk.select-service', $service);
 
         $this->withSession(['queue_request_token' => $token])
-            ->post($url, ['queue_request_token' => $token])
-            ->assertRedirect();
+            ->postJson($url, [
+                'queue_request_token' => $token,
+                'instansi_id' => $service->instansi_id,
+            ])
+            ->assertCreated();
 
-        $this->post($url, ['queue_request_token' => $token])
-            ->assertRedirect(route('public.queue-kiosk'));
+        $this->postJson($url, [
+            'queue_request_token' => $token,
+            'instansi_id' => $service->instansi_id,
+        ])->assertConflict();
 
         $this->assertDatabaseCount('queues', 1);
     }
 
-    public function test_service_from_another_zone_cannot_be_submitted_by_changing_the_url(): void
+    public function test_service_from_another_institution_cannot_be_submitted_by_changing_the_payload(): void
     {
         $service = $this->createService('ZONA 2');
-        $token = 'wrong-zone-token';
+        $otherService = $this->createService('ZONA 3', 'INSTANSI LAIN');
+        $token = 'wrong-institution-token';
 
         $this->withSession(['queue_request_token' => $token])
-            ->post(route('public.queue-kiosk.select-service', [
-                'serviceId' => $service->id,
-                'zona' => 1,
-            ]), ['queue_request_token' => $token])
-            ->assertRedirect(route('public.queue-kiosk'));
+            ->postJson(route('public.queue-kiosk.select-service', $service), [
+                'queue_request_token' => $token,
+                'instansi_id' => $otherService->instansi_id,
+            ])
+            ->assertUnprocessable();
 
         $this->assertDatabaseCount('queues', 0);
     }
@@ -84,11 +99,11 @@ class QueueCreationSecurityTest extends TestCase
         $token = 'inactive-service-token';
 
         $this->withSession(['queue_request_token' => $token])
-            ->post(route('public.queue-kiosk.select-service', [
-                'serviceId' => $service->id,
-                'zona' => 1,
-            ]), ['queue_request_token' => $token])
-            ->assertRedirect(route('public.queue-kiosk'));
+            ->postJson(route('public.queue-kiosk.select-service', $service), [
+                'queue_request_token' => $token,
+                'instansi_id' => $service->instansi_id,
+            ])
+            ->assertUnprocessable();
 
         $this->assertDatabaseCount('queues', 0);
     }
@@ -106,7 +121,7 @@ class QueueCreationSecurityTest extends TestCase
         }
     }
 
-    public function test_kiosk_zone_catalog_uses_current_institutions_from_database(): void
+    public function test_kiosk_home_uses_current_active_institutions_from_database(): void
     {
         $activeService = $this->createService(institutionName: 'INSTANSI DINAMIS');
         $secondInstitution = Instansi::query()->create([
@@ -121,15 +136,49 @@ class QueueCreationSecurityTest extends TestCase
             'is_active' => false,
         ]);
 
-        $zone = app(KioskCatalogService::class)->zones()[1];
-
-        $this->assertSame(2, $zone['institution_count']);
-        $this->assertSame(1, $zone['service_count']);
-
         $this->get(route('public.queue-kiosk'))
             ->assertOk()
             ->assertSee('INSTANSI DINAMIS')
+            ->assertDontSee('INSTANSI KEDUA')
             ->assertDontSee('Kepolisian Resor Kota Besar');
+    }
+
+    public function test_failed_print_reservation_is_canceled_and_never_enters_waiting_queue(): void
+    {
+        $service = $this->createService();
+        $token = 'failed-print-token';
+
+        $response = $this->withSession(['queue_request_token' => $token])
+            ->postJson(route('public.queue-kiosk.select-service', $service), [
+                'queue_request_token' => $token,
+                'instansi_id' => $service->instansi_id,
+            ])
+            ->assertCreated();
+
+        $this->post($response->json('fail_url'))
+            ->assertOk()
+            ->assertJsonPath('canceled', true);
+
+        $queue = Queue::query()->sole();
+        $this->assertSame(Queue::STATUS_CANCELED, $queue->status);
+        $this->assertNotNull($queue->canceled_at);
+    }
+
+    public function test_stale_print_reservation_is_canceled_automatically(): void
+    {
+        $service = $this->createService();
+        $queue = app(QueueService::class)->reserveQueueForPrinting($service->id);
+        $queue->timestamps = false;
+        $queue->forceFill(['updated_at' => now()->subMinutes(3)])->save();
+
+        $expired = app(QueueService::class)->expireStalePrintReservations();
+
+        $this->assertSame(1, $expired);
+        $this->assertDatabaseHas('queues', [
+            'id' => $queue->id,
+            'status' => Queue::STATUS_CANCELED,
+        ]);
+        $this->assertNotNull($queue->fresh()->canceled_at);
     }
 
     public function test_queue_service_generates_sequential_numbers(): void
@@ -202,6 +251,9 @@ class QueueCreationSecurityTest extends TestCase
         $this->get(route('struk.generate', ['queue_id' => $queue->id]))->assertForbidden();
         $this->get(route('barcode.scan', ['queue_id' => $queue->id]))->assertForbidden();
         $this->get(route('tickets.pdf', $queue))->assertForbidden();
+        $this->get(route('tickets.print', $queue))->assertForbidden();
+        $this->post(route('tickets.print.confirm', $queue))->assertForbidden();
+        $this->post(route('tickets.print.fail', $queue))->assertForbidden();
     }
 
     public function test_signed_receipt_requires_a_real_persisted_queue(): void

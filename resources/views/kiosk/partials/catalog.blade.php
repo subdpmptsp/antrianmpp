@@ -1,9 +1,8 @@
 @php
+    use Illuminate\Support\Facades\Storage;
+
     $isLivewire = ($interactionMode ?? 'public') === 'livewire';
-    $currentStep = ! $selectedCounter ? 1 : (! $selectedInstansi ? 2 : 3);
-    $selectedZoneName = $selectedCounter
-        ? ($counters[$selectedCounter]['name'] ?? 'Zona '.$selectedCounter)
-        : null;
+    $currentStep = $selectedInstansi ? 2 : 1;
     $selectedInstitution = $selectedInstansi
         ? $instansis->firstWhere('instansi_id', $selectedInstansi)
         : null;
@@ -21,9 +20,8 @@
             <div class="queue-kiosk__logo queue-kiosk__logo--city">
                 <img src="{{ asset('img/logopemkot_white.png') }}" alt="Logo Pemerintah Kota Surabaya">
             </div>
-
             <div class="queue-kiosk__brand-copy">
-                <span class="queue-kiosk__eyebrow">Pemerintah Kota Surabaya</span>
+                <span>Pemerintah Kota Surabaya</span>
                 <h1>Mal Pelayanan Publik Siola</h1>
                 <p>Mesin pengambilan nomor antrian</p>
             </div>
@@ -34,13 +32,9 @@
                 <strong data-kiosk-clock>--:--</strong>
                 <span data-kiosk-date>Memuat tanggal...</span>
             </div>
-
-            <button class="queue-kiosk__icon-button" type="button" data-kiosk-fullscreen aria-label="Tampilkan layar penuh">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3m13 5h3a2 2 0 0 0 2-2v-3"/>
-                </svg>
+            <button class="queue-kiosk__fullscreen" type="button" data-kiosk-fullscreen aria-label="Tampilkan layar penuh">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3m13 5h3a2 2 0 0 0 2-2v-3"/></svg>
             </button>
-
             <div class="queue-kiosk__logo queue-kiosk__logo--office">
                 <img src="{{ asset('img/dpmptsp.png') }}" alt="Logo DPMPTSP Kota Surabaya">
             </div>
@@ -48,17 +42,8 @@
     </header>
 
     <main class="queue-kiosk__main">
-        @if (session('error'))
-            <div class="queue-kiosk__alert" role="alert">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 9v4m0 4h.01M10.3 4.3 2.7 17.5A1.7 1.7 0 0 0 4.2 20h15.6a1.7 1.7 0 0 0 1.5-2.5L13.7 4.3a2 2 0 0 0-3.4 0Z"/>
-                </svg>
-                <span>{{ session('error') }}</span>
-            </div>
-        @endif
-
         <nav class="queue-kiosk__steps" aria-label="Tahapan pengambilan antrian">
-            @foreach ([1 => ['Zona', 'Pilih area'], 2 => ['Instansi', 'Pilih tujuan'], 3 => ['Layanan', 'Cetak tiket']] as $number => [$label, $description])
+            @foreach ([1 => ['Instansi', 'Pilih tujuan'], 2 => ['Layanan', 'Cetak langsung']] as $number => [$label, $description])
                 <div class="queue-kiosk__step {{ $currentStep >= $number ? 'is-active' : '' }} {{ $currentStep > $number ? 'is-complete' : '' }}">
                     <span class="queue-kiosk__step-number">
                         @if ($currentStep > $number)
@@ -67,64 +52,64 @@
                             {{ $number }}
                         @endif
                     </span>
-                    <span>
-                        <strong>{{ $label }}</strong>
-                        <small>{{ $description }}</small>
-                    </span>
+                    <span><strong>{{ $label }}</strong><small>{{ $description }}</small></span>
                 </div>
             @endforeach
         </nav>
 
         <section class="queue-kiosk__content">
-            @if (! $selectedCounter)
+            @if (! $selectedInstansi)
                 <div class="queue-kiosk__intro">
-                    <span class="queue-kiosk__section-kicker">Langkah 1 dari 3</span>
-                    <h2>Pilih area layanan</h2>
-                    <p>Sentuh zona yang memuat instansi tujuan Anda.</p>
+                    <span>Langkah 1 dari 2</span>
+                    <h2>Instansi apa yang Anda tuju?</h2>
+                    <p>Sentuh salah satu pilihan di bawah ini.</p>
                 </div>
 
-                <div class="queue-kiosk__zone-grid">
-                    @forelse ($counters as $zoneId => $zone)
+                <div class="queue-kiosk__institution-grid" data-kiosk-institution-grid>
+                    @forelse ($instansis as $instansi)
                         @php
-                            $institutions = collect($zone['services'] ?? [])->filter()->values();
-                            $zoneNumber = preg_replace('/\D+/', '', (string) ($zone['name'] ?? $zoneId)) ?: $zoneId;
+                            $logoUrl = $instansi->logo_path
+                                ? Storage::disk('public')->url($instansi->logo_path)
+                                : null;
                         @endphp
-
                         @if ($isLivewire)
-                            <button type="button" class="queue-kiosk__zone-card" wire:click="selectCounter({{ (int) $zoneId }})">
+                            <button type="button" class="queue-kiosk__institution-card" data-kiosk-institution-card wire:click="selectInstansi({{ (int) $instansi->instansi_id }})">
                         @else
-                            <a class="queue-kiosk__zone-card" href="{{ route('public.queue-kiosk', ['zona' => $zoneId]) }}">
+                            <a class="queue-kiosk__institution-card" data-kiosk-institution-card href="{{ route('public.queue-kiosk', ['instansi' => $instansi->instansi_id]) }}">
                         @endif
-                                <span class="queue-kiosk__zone-number">{{ str_pad((string) $zoneNumber, 2, '0', STR_PAD_LEFT) }}</span>
-                                <span class="queue-kiosk__zone-heading">
-                                    <strong>{{ strtoupper($zone['name'] ?? 'Zona '.$zoneId) }}</strong>
-                                    <small>{{ $institutions->count() }} instansi tersedia</small>
-                                </span>
-                                <span class="queue-kiosk__zone-list">
-                                    @foreach ($institutions->take(3) as $institution)
-                                        <span>{{ is_array($institution) ? ($institution['nama_service'] ?? $institution['name'] ?? '-') : $institution }}</span>
-                                    @endforeach
-                                    @if ($institutions->count() > 3)
-                                        <em>+{{ $institutions->count() - 3 }} instansi lainnya</em>
+                                <span class="queue-kiosk__institution-logo {{ $logoUrl ? 'has-image' : '' }}">
+                                    @if ($logoUrl)
+                                        <img src="{{ $logoUrl }}" alt="Logo {{ $instansi->nama_instansi }}">
+                                    @else
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21h16M6 21V8l6-4 6 4v13M9 10h.01M12 10h.01M15 10h.01M9 14h.01M12 14h.01M15 14h.01M10 21v-3h4v3"/></svg>
                                     @endif
                                 </span>
-                                <span class="queue-kiosk__card-action">
-                                    Pilih zona
-                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                                <span class="queue-kiosk__institution-copy">
+                                    <strong>{{ $instansi->nama_instansi }}</strong>
+                                    <small>{{ $instansi->active_services_count }} layanan tersedia</small>
                                 </span>
-                        @if ($isLivewire)
-                            </button>
-                        @else
-                            </a>
-                        @endif
+                                <svg class="queue-kiosk__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                        @if ($isLivewire)</button>@else</a>@endif
                     @empty
                         <div class="queue-kiosk__empty">
-                            <h3>Zona belum tersedia</h3>
+                            <h3>Instansi belum tersedia</h3>
                             <p>Silakan hubungi petugas layanan.</p>
                         </div>
                     @endforelse
                 </div>
-            @elseif (! $selectedInstansi)
+
+                @if ($instansis->count() > 6)
+                    <div class="queue-kiosk__pagination" data-kiosk-pagination>
+                        <button type="button" data-kiosk-page-prev aria-label="Halaman sebelumnya">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                        </button>
+                        <strong><span data-kiosk-page-current>1</span> / <span data-kiosk-page-total>{{ (int) ceil($instansis->count() / 6) }}</span></strong>
+                        <button type="button" data-kiosk-page-next aria-label="Halaman berikutnya">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                    </div>
+                @endif
+            @else
                 <div class="queue-kiosk__toolbar">
                     @if ($isLivewire)
                         <button type="button" class="queue-kiosk__back" wire:click="resetSelection">
@@ -132,73 +117,21 @@
                         <a class="queue-kiosk__back" href="{{ route('public.queue-kiosk') }}">
                     @endif
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-                            Kembali
+                            Ganti instansi
                     @if ($isLivewire)</button>@else</a>@endif
 
-                    <span class="queue-kiosk__selection-pill">{{ strtoupper($selectedZoneName) }}</span>
-                </div>
-
-                <div class="queue-kiosk__intro">
-                    <span class="queue-kiosk__section-kicker">Langkah 2 dari 3</span>
-                    <h2>Pilih instansi tujuan</h2>
-                    <p>Sentuh nama instansi yang ingin Anda kunjungi.</p>
-                </div>
-
-                <div class="queue-kiosk__institution-grid">
-                    @forelse ($instansis as $instansi)
-                        @if ($isLivewire)
-                            <button type="button" class="queue-kiosk__institution-card" wire:click="selectInstansi({{ (int) $instansi->instansi_id }})">
-                        @else
-                            <a class="queue-kiosk__institution-card" href="{{ route('public.queue-kiosk', ['zona' => $selectedCounter, 'instansi' => $instansi->instansi_id]) }}">
+                    <div class="queue-kiosk__selected-institution">
+                        @if ($selectedInstitution?->logo_path)
+                            <img src="{{ Storage::disk('public')->url($selectedInstitution->logo_path) }}" alt="">
                         @endif
-                                <span class="queue-kiosk__institution-icon">
-                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21h16M6 21V8l6-4 6 4v13M9 10h.01M12 10h.01M15 10h.01M9 14h.01M12 14h.01M15 14h.01M10 21v-3h4v3"/></svg>
-                                </span>
-                                <span class="queue-kiosk__institution-name">{{ $instansi->nama_instansi }}</span>
-                                <span class="queue-kiosk__institution-arrow">
-                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-                                </span>
-                        @if ($isLivewire)</button>@else</a>@endif
-                    @empty
-                        <div class="queue-kiosk__empty">
-                            <h3>Instansi belum tersedia</h3>
-                            <p>Kembali dan pilih zona lainnya atau hubungi petugas.</p>
-                        </div>
-                    @endforelse
-                </div>
-            @else
-                <div class="queue-kiosk__toolbar">
-                    @if ($instansis->count() > 1)
-                        @if ($isLivewire)
-                            <button type="button" class="queue-kiosk__back" wire:click="resetInstansi">
-                        @else
-                            <a class="queue-kiosk__back" href="{{ route('public.queue-kiosk', ['zona' => $selectedCounter]) }}">
-                        @endif
-                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-                                Kembali
-                        @if ($isLivewire)</button>@else</a>@endif
-                    @else
-                        @if ($isLivewire)
-                            <button type="button" class="queue-kiosk__back" wire:click="resetSelection">
-                        @else
-                            <a class="queue-kiosk__back" href="{{ route('public.queue-kiosk') }}">
-                        @endif
-                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-                                Kembali
-                        @if ($isLivewire)</button>@else</a>@endif
-                    @endif
-
-                    <div class="queue-kiosk__selection-summary">
-                        <span>{{ strtoupper($selectedZoneName) }}</span>
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-                        <strong>{{ $selectedInstitution?->nama_instansi ?? 'Instansi' }}</strong>
+                        <span><small>Instansi terpilih</small><strong>{{ $selectedInstitution?->nama_instansi }}</strong></span>
                     </div>
                 </div>
 
                 <div class="queue-kiosk__intro">
-                    <span class="queue-kiosk__section-kicker">Langkah 3 dari 3</span>
-                    <h2>Pilih layanan</h2>
-                    <p>Periksa pilihan Anda, lalu cetak nomor antrian.</p>
+                    <span>Langkah 2 dari 2</span>
+                    <h2>Pilih layanan yang dibutuhkan</h2>
+                    <p>Tiket akan langsung dicetak setelah layanan disentuh.</p>
                 </div>
 
                 <div class="queue-kiosk__service-grid">
@@ -207,11 +140,12 @@
                             <form
                                 id="kiosk-service-{{ $service->id }}"
                                 method="POST"
-                                action="{{ route('public.queue-kiosk.select-service', ['serviceId' => $service->id, 'zona' => $selectedCounter]) }}"
+                                action="{{ route('public.queue-kiosk.select-service', ['serviceId' => $service->id]) }}"
                                 class="queue-kiosk__service-form"
                             >
                                 @csrf
                                 <input type="hidden" name="queue_request_token" value="{{ $queueRequestToken }}">
+                                <input type="hidden" name="instansi_id" value="{{ $selectedInstansi }}">
                             </form>
                         @endif
 
@@ -220,23 +154,21 @@
                             class="queue-kiosk__service-card"
                             data-kiosk-service
                             data-service-id="{{ $service->id }}"
-                            data-service-name="{{ $service->name ?? $service->nama_service ?? 'Layanan' }}"
-                            data-institution-name="{{ $selectedInstitution?->nama_instansi ?? 'Instansi' }}"
                             @if (! $isLivewire) data-form-id="kiosk-service-{{ $service->id }}" @endif
                         >
                             <span class="queue-kiosk__service-icon">
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v7H6zM18 12h.01"/></svg>
                             </span>
                             <span class="queue-kiosk__service-copy">
-                                <strong>{{ $service->name ?? $service->nama_service ?? '-' }}</strong>
-                                <small>Sentuh untuk mengambil nomor</small>
+                                <strong>{{ $service->name }}</strong>
+                                <small>Sentuh untuk mencetak tiket</small>
                             </span>
-                            <span class="queue-kiosk__service-action">Cetak tiket</span>
+                            <svg class="queue-kiosk__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                         </button>
                     @empty
                         <div class="queue-kiosk__empty">
                             <h3>Layanan belum tersedia</h3>
-                            <p>Silakan pilih instansi lain atau hubungi petugas.</p>
+                            <p>Silakan pilih instansi lainnya atau hubungi petugas.</p>
                         </div>
                     @endforelse
                 </div>
@@ -245,40 +177,28 @@
     </main>
 
     <footer class="queue-kiosk__footer">
-        <span class="queue-kiosk__connection">
-            <i data-kiosk-online-dot></i>
-            <span data-kiosk-online-text>Sistem siap digunakan</span>
-        </span>
-        <span>Butuh bantuan? Silakan hubungi petugas di area layanan.</span>
+        <span>Butuh bantuan? Silakan hubungi petugas.</span>
+        <span class="queue-kiosk__connection"><i></i><strong data-kiosk-online-text>Sistem siap digunakan</strong></span>
     </footer>
 
     <div class="queue-kiosk__loading" data-kiosk-loading aria-live="polite" aria-hidden="true">
-        <span class="queue-kiosk__spinner"></span>
-        <strong>Sedang menyiapkan tiket...</strong>
-        <small>Mohon tunggu dan jangan sentuh layar.</small>
+        <span class="queue-kiosk__printer-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v7H6z"/></svg>
+        </span>
+        <strong>Sedang mencetak</strong>
+        <span>Mohon ambil tiket Anda</span>
+        <small>Jangan tekan layar kembali.</small>
     </div>
 
-    <dialog class="queue-kiosk__dialog" data-kiosk-dialog>
-        <div class="queue-kiosk__dialog-icon">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v7H6z"/></svg>
-        </div>
-        <span class="queue-kiosk__section-kicker">Konfirmasi pilihan</span>
-        <h2>Cetak nomor antrian?</h2>
-        <dl>
-            <div><dt>Instansi</dt><dd data-kiosk-dialog-institution>-</dd></div>
-            <div><dt>Layanan</dt><dd data-kiosk-dialog-service>-</dd></div>
-        </dl>
-        <div class="queue-kiosk__dialog-actions">
-            <button type="button" class="queue-kiosk__dialog-cancel" data-kiosk-dialog-cancel>Periksa kembali</button>
-            <button type="button" class="queue-kiosk__dialog-confirm" data-kiosk-dialog-confirm>
-                Ya, cetak tiket
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-            </button>
-        </div>
-    </dialog>
+    <div class="queue-kiosk__error" data-kiosk-error hidden role="alert">
+        <span>!</span>
+        <strong>Mesin cetak belum siap</strong>
+        <p data-kiosk-error-message>Silakan hubungi petugas.</p>
+        <button type="button" data-kiosk-error-home>Kembali</button>
+    </div>
 
     @if ($isLivewire)
-        <div class="queue-kiosk__wire-loading" wire:loading.flex wire:target="selectCounter,selectInstansi,selectService,resetInstansi,resetSelection">
+        <div class="queue-kiosk__wire-loading" wire:loading.flex wire:target="selectInstansi,resetSelection">
             <span class="queue-kiosk__spinner"></span>
         </div>
     @endif

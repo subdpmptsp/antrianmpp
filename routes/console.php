@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
+use App\Services\QueueService;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -17,4 +18,9 @@ Schedule::command('attendance:reset-daily')
 Schedule::command('audio:cleanup-generated --days=7')
     ->dailyAt('02:00')
     ->timezone('Asia/Jakarta')
+    ->withoutOverlapping();
+
+Schedule::call(fn () => app(QueueService::class)->expireStalePrintReservations())
+    ->name('expire-stale-kiosk-print-reservations')
+    ->everyMinute()
     ->withoutOverlapping();

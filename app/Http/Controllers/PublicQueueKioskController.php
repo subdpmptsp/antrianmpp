@@ -3,112 +3,117 @@
 namespace App\Http\Controllers;
 
 use App\Models\Instansi;
+use App\Models\Queue;
 use App\Models\Service;
-use App\Services\KioskCatalogService;
 use App\Services\MasterDataCache;
 use App\Services\QueueService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
 class PublicQueueKioskController extends Controller
 {
-    public function __construct(
-        private readonly KioskCatalogService $catalog,
-        private readonly MasterDataCache $masterData,
-    ) {}
+    public function __construct(private readonly MasterDataCache $masterData) {}
 
     public function index(Request $request)
     {
-        $counters = $this->catalog->zones();
         $queueRequestToken = (string) Str::uuid();
         $request->session()->put('queue_request_token', $queueRequestToken);
 
-        $selectedCounter = $request->integer('zona') ?: null;
+        $instansis = $this->masterData->remember(
+            'kiosk:institutions:active:v1',
+            fn () => Instansi::query()
+                ->whereNotNull('counter_id')
+                ->whereHas('services', fn ($query) => $query->where('is_active', true))
+                ->withCount([
+                    'services as active_services_count' => fn ($query) => $query->where('is_active', true),
+                ])
+                ->orderBy('nama_instansi')
+                ->get(),
+        );
+
         $selectedInstansi = $request->integer('instansi') ?: null;
-        $selectedService = $request->get('service');
+        $selectedInstitution = $selectedInstansi
+            ? $instansis->firstWhere('instansi_id', $selectedInstansi)
+            : null;
 
-        $instansis = collect();
-        $services = collect();
-
-        // Jika zona dipilih, ambil instansi
-        if ($selectedCounter && isset($counters[$selectedCounter])) {
-            $counterId = $counters[$selectedCounter]['counter_id'];
-
-            if ($counterId) {
-                $instansis = $this->masterData->remember(
-                    "instansis:counter:{$counterId}",
-                    fn () => Instansi::where('counter_id', $counterId)
-                        ->orderBy('nama_instansi')
-                        ->get(),
-                );
-
-                // Auto-select instansi jika hanya ada satu dan belum dipilih
-                if ($instansis->count() === 1 && ! $selectedInstansi) {
-                    $selectedInstansi = $instansis->first()->instansi_id;
-                }
-            }
-        } else {
-            $selectedCounter = null;
-        }
-
-        // Jika instansi dipilih, ambil services
-        if ($selectedInstansi && $instansis->contains('instansi_id', $selectedInstansi)) {
-            $services = $this->masterData->remember(
-                "services:instansi:{$selectedInstansi}",
-                fn () => Service::where('instansi_id', $selectedInstansi)
-                    ->where('is_active', true)
-                    ->orderBy('name')
-                    ->get(),
-            );
-        } else {
+        if (! $selectedInstitution) {
             $selectedInstansi = null;
         }
 
+        $services = $selectedInstansi
+            ? $this->masterData->remember(
+                "services:instansi:{$selectedInstansi}:active",
+                fn () => Service::query()
+                    ->where('instansi_id', $selectedInstansi)
+                    ->where('is_active', true)
+                    ->orderBy('name')
+                    ->get(),
+            )
+            : collect();
+
         return view('public.queue-kiosk', [
-            'counters' => $counters,
-            'selectedCounter' => $selectedCounter,
             'selectedInstansi' => $selectedInstansi,
-            'selectedService' => $selectedService,
             'instansis' => $instansis,
             'services' => $services,
             'queueRequestToken' => $queueRequestToken,
         ]);
     }
 
-    public function selectService(Request $request, $serviceId, QueueService $queueService)
+    public function selectService(Request $request, int $serviceId, QueueService $queueService): JsonResponse
     {
         $submittedToken = $request->string('queue_request_token')->toString();
         $expectedToken = (string) $request->session()->pull('queue_request_token', '');
 
         if ($submittedToken === '' || $expectedToken === '' || ! hash_equals($expectedToken, $submittedToken)) {
-            return redirect()->route('public.queue-kiosk')
-                ->with('error', 'Permintaan tiket sudah diproses atau kedaluwarsa. Silakan pilih layanan kembali.');
+            return response()->json([
+                'message' => 'Permintaan tiket sudah diproses atau kedaluwarsa. Silakan kembali ke halaman awal.',
+            ], 409);
         }
 
-        $selectedCounter = $request->integer('zona');
-        $zone = $this->catalog->zones()[$selectedCounter] ?? null;
+        $selectedInstansi = $request->integer('instansi_id');
         $service = Service::query()->with('instansi')->find($serviceId);
 
         if (
-            ! $zone
-            || ! $zone['counter_id']
-            || ! $service
+            ! $service
             || ! $service->is_active
             || ! $service->instansi
-            || (int) $service->instansi->counter_id !== (int) $zone['counter_id']
+            || ! $service->instansi->counter_id
+            || (int) $service->instansi_id !== $selectedInstansi
         ) {
-            return redirect()->route('public.queue-kiosk')
-                ->with('error', 'Layanan tidak aktif atau tidak tersedia pada zona yang dipilih.');
+            return response()->json([
+                'message' => 'Layanan tidak aktif atau tidak tersedia pada instansi yang dipilih.',
+            ], 422);
         }
 
-        $queue = $queueService->addQueue($service->id);
+        try {
+            $queue = $queueService->reserveQueueForPrinting($service->id);
 
-        // Redirect ke PDF generator
-        $pdfUrl = URL::temporarySignedRoute('struk.generate', now()->addMinutes(15), [
+            return response()->json($this->printPayload($queue), 201);
+        } catch (\Throwable $exception) {
+            Log::error('Gagal menyiapkan tiket kiosk publik.', [
+                'service_id' => $serviceId,
+                'exception' => $exception,
+            ]);
+
+            return response()->json([
+                'message' => 'Tiket gagal disiapkan. Silakan hubungi petugas.',
+            ], 500);
+        }
+    }
+
+    private function printPayload(Queue $queue): array
+    {
+        $expiresAt = now()->addMinutes(2);
+
+        return [
             'queue_id' => $queue->id,
-        ]);
-
-        return redirect($pdfUrl);
+            'number' => $queue->number,
+            'print_url' => URL::temporarySignedRoute('tickets.print', $expiresAt, ['queue' => $queue], absolute: false),
+            'confirm_url' => URL::temporarySignedRoute('tickets.print.confirm', $expiresAt, ['queue' => $queue], absolute: false),
+            'fail_url' => URL::temporarySignedRoute('tickets.print.fail', $expiresAt, ['queue' => $queue], absolute: false),
+        ];
     }
 }

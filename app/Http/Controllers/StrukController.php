@@ -47,6 +47,16 @@ class StrukController extends Controller
         return $pdf->stream('struk-antrian-'.$queue->number.'.pdf');
     }
 
+    public function printTicket(Queue $queue)
+    {
+        $queue->loadMissing('service.instansi.counter');
+        abort_unless($queue->service, 404, 'Layanan tidak ditemukan.');
+
+        return response()
+            ->view('print.ticket', ['queue' => $queue])
+            ->header('Cache-Control', 'no-store, private');
+    }
+
     public function previewStruk(Request $request)
     {
         $serviceId = $request->input('service_id');

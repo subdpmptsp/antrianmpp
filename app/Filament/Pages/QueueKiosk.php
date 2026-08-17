@@ -2,10 +2,9 @@
 
 namespace App\Filament\Pages;
 
-use App\Models\Counter;
 use App\Models\Instansi;
+use App\Models\Queue;
 use App\Models\Service;
-use App\Services\KioskCatalogService;
 use App\Services\QueueService;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Log;
@@ -23,6 +22,12 @@ class QueueKiosk extends Page
 
     protected static ?string $navigationIcon = 'heroicon-o-printer';
 
+    public $selectedInstansi = null;
+
+    public $instansis;
+
+    public $services;
+
     public static function canAccess(): bool
     {
         return auth()->user()?->can('access-admin-area') ?? false;
@@ -33,203 +38,75 @@ class QueueKiosk extends Page
         return static::canAccess();
     }
 
-    public $selectedCounter = null;        // key dari array $counters (1..5)
-
-    public $selectedCounterDbId = null;    // <-- ID counter sebenarnya di DB
-
-    public $selectedInstansi = null;
-
-    public $selectedService = null;
-
-    public $counters = [];
-
-    public $instansis;
-
-    public $services;
-
-    public function mount(KioskCatalogService $catalog): void
+    public function mount(): void
     {
-        $this->counters = $catalog->zones();
-        $this->instansis = collect();
-        $this->services = collect();
-    }
-
-    protected function getViewData(): array
-    {
-        return [
-            'countersDb' => Counter::with(['instansi', 'service'])->get(),
-        ];
-    }
-
-    public function selectCounter($arrayKey)
-    {
-        $this->selectedCounter = (int) $arrayKey;
-        $this->selectedInstansi = null;
-        $this->selectedService = null;
-        $this->services = collect();
-
-        if (! isset($this->counters[$this->selectedCounter])) {
-            $this->dispatch('notify', type: 'error', message: 'Zona tidak ditemukan.');
-
-            return;
-        }
-
-        $counterName = $this->counters[$this->selectedCounter]['name'];
-        $this->selectedCounterDbId = $this->counters[$this->selectedCounter]['counter_id'];
-
-        if (! $this->selectedCounterDbId) {
-            $this->instansis = collect();
-            $this->dispatch('notify', type: 'warning', message: "Counter '{$counterName}' tidak ditemukan.");
-
-            return;
-        }
-
-        $this->instansis = Instansi::where('counter_id', $this->selectedCounterDbId)
+        $this->instansis = Instansi::query()
+            ->whereNotNull('counter_id')
+            ->whereHas('services', fn ($query) => $query->where('is_active', true))
+            ->withCount([
+                'services as active_services_count' => fn ($query) => $query->where('is_active', true),
+            ])
             ->orderBy('nama_instansi')
             ->get();
-
-        // Auto-select instansi jika hanya ada satu instansi di zona ini
-        if ($this->instansis->count() === 1) {
-            $singleInstansi = $this->instansis->first();
-            $this->selectInstansi($singleInstansi->instansi_id);
-        }
+        $this->services = collect();
     }
 
-    public function selectInstansi($instansiId)
+    public function selectInstansi(int $instansiId): void
     {
-        $instansi = $this->instansis->firstWhere('instansi_id', (int) $instansiId);
+        $institution = $this->instansis->firstWhere('instansi_id', $instansiId);
 
-        if (! $instansi) {
-            $this->selectedInstansi = null;
-            $this->services = collect();
-            $this->dispatch('notify', type: 'error', message: 'Instansi tidak tersedia pada zona yang dipilih.');
+        if (! $institution) {
+            $this->dispatch('kiosk-print-error', message: 'Instansi tidak tersedia.');
 
             return;
         }
 
-        $this->selectedInstansi = (int) $instansiId;
-        $this->selectedService = null;
-
-        $this->services = Service::where('instansi_id', $instansiId)
+        $this->selectedInstansi = $instansiId;
+        $this->services = Service::query()
+            ->where('instansi_id', $instansiId)
             ->where('is_active', true)
-            ->orderBy('name') // ganti ke 'nama_service' jika kolommu itu
+            ->orderBy('name')
             ->get();
     }
 
-    // MASIH DIPAKAI? Kalau ya, gunakan selectedCounterDbId agar akurat.
-    public function selectInstansiByName($label)
+    public function selectService(int $serviceId, QueueService $queueService): void
     {
-        if (! $this->selectedCounterDbId) {
+        $service = $this->services->firstWhere('id', $serviceId);
+
+        if (! $service || (int) $service->instansi_id !== (int) $this->selectedInstansi) {
+            $this->dispatch('kiosk-print-error', message: 'Layanan tidak tersedia pada instansi yang dipilih.');
+
             return;
         }
 
-        $instansi = Instansi::where('counter_id', $this->selectedCounterDbId)
-            ->whereRaw('LOWER(TRIM(nama_instansi)) = LOWER(TRIM(?))', [$label])
-            ->first();
-
-        if ($instansi) {
-            $this->selectInstansi($instansi->instansi_id);
-        } else {
-            $this->selectedInstansi = null;
-            $this->services = collect();
-            $this->dispatch('notify', type: 'warning', message: "Instansi '{$label}' belum terdaftar di database.");
-        }
-    }
-
-    public function selectService($serviceId)
-    {
-        $this->selectedService = $this->services->firstWhere('id', (int) $serviceId);
-
-        // Auto-print struk when service is selected
-        if ($this->selectedService) {
-            $this->printStruk($serviceId);
-        }
-    }
-
-    public function resetInstansi()
-    {
-        $this->selectedInstansi = null;
-        $this->selectedService = null;
-        $this->services = collect();
-    }
-
-    public function resetSelection()
-    {
-        $this->selectedCounter = null;
-        $this->selectedCounterDbId = null;   // <-- reset juga
-        $this->selectedInstansi = null;
-        $this->selectedService = null;
-        $this->instansis = collect();
-        $this->services = collect();
-    }
-
-    public function printStruk($serviceId)
-    {
         try {
-            // Ambil data service
-            $service = Service::with('instansi')->find($serviceId);
-            if (
-                ! $service
-                || ! $service->is_active
-                || ! $service->instansi
-                || (int) $service->instansi->counter_id !== (int) $this->selectedCounterDbId
-            ) {
-                Log::error('Service not found for ID: '.$serviceId);
-                $this->dispatch('notify', type: 'error', message: 'Layanan tidak tersedia pada zona yang dipilih!');
-
-                return;
-            }
-
-            $queue = app(QueueService::class)->addQueue($service->id);
-            $queueNumber = $queue->number;
-
-            $pdfUrl = URL::temporarySignedRoute('struk.generate', now()->addMinutes(15), [
-                'queue_id' => $queue->id,
-            ]);
-
-            return redirect($pdfUrl);
-
-        } catch (\Exception $e) {
-            Log::error('Gagal membuat tiket dari kiosk admin.', [
+            $queue = $queueService->reserveQueueForPrinting($service->id);
+            $this->dispatch('ticket-ready', ...$this->printPayload($queue));
+        } catch (\Throwable $exception) {
+            Log::error('Gagal menyiapkan tiket kiosk admin.', [
                 'service_id' => $serviceId,
-                'exception' => $e,
+                'exception' => $exception,
             ]);
-            $this->dispatch('notify', type: 'error', message: 'Tiket gagal dibuat. Silakan coba kembali atau hubungi admin.');
+            $this->dispatch('kiosk-print-error', message: 'Tiket gagal disiapkan. Silakan hubungi petugas.');
         }
     }
 
-    public function printBarcode($serviceId)
+    public function resetSelection(): void
     {
-        // Ambil data service
-        $service = Service::with('instansi')->find($serviceId);
-        if (
-            ! $service
-            || ! $service->is_active
-            || ! $service->instansi
-            || (int) $service->instansi->counter_id !== (int) $this->selectedCounterDbId
-        ) {
-            $this->dispatch('notify', type: 'error', message: 'Layanan tidak tersedia pada zona yang dipilih!');
-
-            return;
-        }
-
-        $queue = app(QueueService::class)->addQueue($service->id);
-        $queueNumber = $queue->number;
-
-        // Redirect ke halaman barcode
-        $barcodeUrl = route('barcode.show', [
-            'queue_id' => $queue->id,
-        ]);
-
-        // Buka halaman barcode di tab baru
-        $this->dispatch('open-barcode', url: $barcodeUrl);
-
-        // Notifikasi sukses
-        $this->dispatch('notify', type: 'success', message: "Barcode nomor {$queueNumber} berhasil dibuat!");
+        $this->selectedInstansi = null;
+        $this->services = collect();
     }
 
-    public function printTicket(Service $service)
+    private function printPayload(Queue $queue): array
     {
-        $this->dispatch('notify', type: 'success', message: "Tiket untuk layanan {$service->name} berhasil dicetak!");
+        $expiresAt = now()->addMinutes(2);
+
+        return [
+            'queueId' => $queue->id,
+            'number' => $queue->number,
+            'printUrl' => URL::temporarySignedRoute('tickets.print', $expiresAt, ['queue' => $queue], absolute: false),
+            'confirmUrl' => URL::temporarySignedRoute('tickets.print.confirm', $expiresAt, ['queue' => $queue], absolute: false),
+            'failUrl' => URL::temporarySignedRoute('tickets.print.fail', $expiresAt, ['queue' => $queue], absolute: false),
+        ];
     }
 }

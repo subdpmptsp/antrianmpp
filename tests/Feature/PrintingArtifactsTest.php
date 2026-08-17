@@ -79,6 +79,24 @@ class PrintingArtifactsTest extends TestCase
         $this->assertStringEndsWith("\x1B\x69", $output);
     }
 
+    public function test_direct_print_ticket_is_html_and_contains_the_persisted_queue(): void
+    {
+        $queue = $this->createQueue();
+        $url = URL::temporarySignedRoute(
+            'tickets.print',
+            now()->addMinute(),
+            ['queue' => $queue],
+            absolute: false,
+        );
+
+        $this->get($url)
+            ->assertOk()
+            ->assertHeader('Content-Type', 'text/html; charset=UTF-8')
+            ->assertSee($queue->number)
+            ->assertSee($queue->service->name)
+            ->assertDontSee('.pdf');
+    }
+
     private function createQueue(): Queue
     {
         $counter = Counter::query()->create(['name' => 'ZONA TEST', 'is_active' => true]);

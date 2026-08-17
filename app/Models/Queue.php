@@ -8,6 +8,8 @@ class Queue extends Model
 {
     public const STATUS_WAITING = 'waiting';
 
+    public const STATUS_PRINTING = 'printing';
+
     public const STATUS_CALLED = 'called';
 
     public const STATUS_SERVING = 'serving';
@@ -18,6 +20,7 @@ class Queue extends Model
 
     public const VALID_STATUSES = [
         self::STATUS_WAITING,
+        self::STATUS_PRINTING,
         self::STATUS_CALLED,
         self::STATUS_SERVING,
         self::STATUS_FINISHED,

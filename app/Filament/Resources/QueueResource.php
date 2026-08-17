@@ -124,6 +124,7 @@ class QueueResource extends Resource
                         Forms\Components\Select::make('status')
                             ->label('Status')
                             ->options([
+                                Queue::STATUS_PRINTING => 'Sedang Dicetak',
                                 Queue::STATUS_WAITING => 'Menunggu',
                                 Queue::STATUS_CALLED => 'Dipanggil',
                                 Queue::STATUS_SERVING => 'Sedang Dilayani',
