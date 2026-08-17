@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\InvalidatesMasterDataCache;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 
 class Counter extends Model
 {
+    use InvalidatesMasterDataCache;
+
     protected $fillable = [
         'name',
         'instansi_id',
@@ -18,7 +21,7 @@ class Counter extends Model
     protected static function booted()
     {
         static::addGlobalScope('roleBasedAccess', function (Builder $builder) {
-            if (Auth::check() && Auth::user()->role === 'operator') {
+            if (Auth::user()?->isOperator()) {
                 $builder->where('id', Auth::user()->counter_id);
             }
         });
@@ -36,13 +39,6 @@ class Counter extends Model
         return $this->belongsTo(Service::class, 'service_id');
     }
 
-    // Relasi many-to-many dengan Service (untuk compatibility)
-    public function assignedServices()
-    {
-        return $this->belongsToMany(Service::class, 'counter_service', 'counter_id', 'service_id')
-            ->select('services.*');
-    }
-
     public function instansis()
     {
         return $this->hasMany(Instansi::class, 'counter_id', 'id');
@@ -54,13 +50,11 @@ class Counter extends Model
         return $this->hasOne(User::class, 'counter_id');
     }
 
-
     // Relasi ke tabel Queue
     public function queues()
     {
         return $this->hasMany(Queue::class, 'counter_id');
     }
-
 
     // Queue yang aktif (sedang dilayani atau dipanggil)
     public function activeQueue()
@@ -89,14 +83,18 @@ class Counter extends Model
     // Apakah loket masih tersedia
     public function getIsAvailableAttribute()
     {
+        if ($this->relationLoaded('activeQueue')) {
+            return $this->activeQueue === null && $this->is_active;
+        }
+
         $hasActiveQueue = $this->queues()
             ->whereIn('status', ['serving', 'called'])
             ->whereDate('created_at', now()->toDateString())
             ->exists();
 
-        return !$hasActiveQueue && $this->is_active;
+        return ! $hasActiveQueue && $this->is_active;
     }
-    
+
     // Get current serving queue (prioritas: serving > called)
     public function getCurrentQueueAttribute()
     {

@@ -2,33 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Queue;
-use Illuminate\Http\Request;
+use App\Services\AnnouncementService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class AnnouncementController extends Controller
 {
-    public function getLatestAnnouncement(): JsonResponse
+    public function getLatestAnnouncement(Request $request, AnnouncementService $announcements): JsonResponse
     {
-        // Ambil antrian yang baru saja dipanggil (dalam 30 detik terakhir)
-        $latestAnnouncement = Queue::with(['service', 'counter.instansi'])
-            ->where('status', 'serving')
-            ->where('called_at', '>=', now()->subSeconds(30))
-            ->orderBy('called_at', 'desc')
-            ->first();
-
-        if (!$latestAnnouncement) {
-            return response()->json(null);
-        }
-
-        return response()->json([
-            'queueNumber' => $latestAnnouncement->number,
-            'serviceName' => $latestAnnouncement->service?->name ?? 'Layanan',
-            'counterName' => $latestAnnouncement->counter?->name ?? 'Loket',
-            'zona' => $latestAnnouncement->counter?->instansi?->nama_instansi ?? 'Zona',
-            'calledAt' => $latestAnnouncement->called_at ? 
-                (is_string($latestAnnouncement->called_at) ? $latestAnnouncement->called_at : $latestAnnouncement->called_at->format('H:i:s')) : 
-                now()->format('H:i:s')
-        ]);
+        return response()->json(
+            $announcements->latest(
+                $request->string('after_id')->toString() ?: null,
+                $request->integer('zone_id') ?: null,
+            ),
+        );
     }
 }

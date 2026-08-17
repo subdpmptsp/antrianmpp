@@ -21,8 +21,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('counters', function (Blueprint $table) {
-            $table->unsignedBigInteger('service_id')->nullable(false)->change();
-        });
+        // The preceding migration already creates service_id as nullable.
+        // Reverting it to NOT NULL would conflict with nullOnDelete and existing null rows.
     }
 };

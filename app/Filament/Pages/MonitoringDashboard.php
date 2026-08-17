@@ -2,47 +2,52 @@
 
 namespace App\Filament\Pages;
 
-use Filament\Pages\Page;
+use App\Exports\RekapLayananExport;
+use App\Models\Queue;
+use App\Models\Service;
+use Filament\Actions\Action;
 use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Actions\Action;
-use App\Models\Service;
-use Maatwebsite\Excel\Facades\Excel;
-use App\Exports\RekapLayananExport;
+use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\On;
+use Maatwebsite\Excel\Facades\Excel;
 
 class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
 {
     use Forms\Concerns\InteractsWithForms;
 
-    protected static ?string $navigationIcon  = 'heroicon-o-document-text';
+    protected static ?string $navigationIcon = 'heroicon-o-document-text';
+
     protected static ?string $navigationLabel = 'Monitoring Dashboard';
-    protected static ?string $navigationGroup = 'Laporan & Monitoring';
-    protected static string $view             = 'filament.pages.monitoring-dashboard';
-    
+
+    protected static ?string $navigationGroup = 'Monitoring';
+
+    protected static string $view = 'filament.pages.monitoring-dashboard';
+
     public static function canAccess(): bool
     {
-        return \Illuminate\Support\Facades\Auth::user()->role === 'admin';
+        return auth()->user()?->can('access-admin-area') ?? false;
     }
-    
+
     public static function shouldRegisterNavigation(): bool
     {
-        return \Illuminate\Support\Facades\Auth::user()->role === 'admin';
+        return static::canAccess();
     }
 
     // filter tanggal sederhana
     public ?string $from = null;
-    public ?string $to   = null;
+
+    public ?string $to = null;
 
     public function mount(): void
     {
         $this->from = now()->toDateString();
-        $this->to   = now()->toDateString();
+        $this->to = now()->toDateString();
 
         $this->form->fill([
             'from' => $this->from,
-            'to'   => $this->to,
+            'to' => $this->to,
         ]);
     }
 
@@ -73,26 +78,26 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
     {
         $from = now()->parse($this->from)->startOfDay();
         $to = now()->parse($this->to)->endOfDay();
-        
+
         $rekapan = Service::query()
             ->withCount([
                 'queues as queues_count' => function ($q) use ($from, $to) {
                     $q->whereBetween('created_at', [$from, $to]);
                 },
                 'queues as menunggu_count' => function ($q) use ($from, $to) {
-                    $q->where('status', 'waiting')->whereBetween('created_at', [$from, $to]);
+                    $q->where('status', Queue::STATUS_WAITING)->whereBetween('created_at', [$from, $to]);
                 },
                 'queues as dipanggil_count' => function ($q) use ($from, $to) {
-                    $q->where('status', 'called')->whereBetween('created_at', [$from, $to]);
+                    $q->where('status', Queue::STATUS_CALLED)->whereBetween('created_at', [$from, $to]);
                 },
                 'queues as dilayani_count' => function ($q) use ($from, $to) {
-                    $q->where('status', 'serving')->whereBetween('created_at', [$from, $to]);
+                    $q->where('status', Queue::STATUS_SERVING)->whereBetween('created_at', [$from, $to]);
                 },
                 'queues as selesai_count' => function ($q) use ($from, $to) {
-                    $q->whereIn('status', ['completed', 'finished'])->whereBetween('created_at', [$from, $to]);
+                    $q->where('status', Queue::STATUS_FINISHED)->whereBetween('created_at', [$from, $to]);
                 },
                 'queues as batal_count' => function ($q) use ($from, $to) {
-                    $q->where('status', 'canceled')->whereBetween('created_at', [$from, $to]);
+                    $q->where('status', Queue::STATUS_CANCELED)->whereBetween('created_at', [$from, $to]);
                 },
             ])
             ->orderBy('name')
@@ -116,39 +121,40 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
                 // arahkan ke route export sambil bawa query from & to dari form
                 ->url(fn () => route('export.rekap-layanan', [
                     'from' => $this->from,
-                    'to'   => $this->to,
+                    'to' => $this->to,
                 ]), shouldOpenInNewTab: false),
         ];
     }
+
     public function getMonitoringRealTime()
     {
         $today = now()->toDateString();
-        
+
         return Service::withCount([
             // jumlah antrian menunggu per layanan
             'queues as menunggu_count' => function ($q) use ($today) {
-                $q->where('status', 'waiting')
-                  ->whereDate('created_at', $today);
+                $q->where('status', Queue::STATUS_WAITING)
+                    ->whereDate('created_at', $today);
             },
             // jumlah antrian dipanggil per layanan
             'queues as dipanggil_count' => function ($q) use ($today) {
-                $q->where('status', 'called')
-                  ->whereDate('created_at', $today);
+                $q->where('status', Queue::STATUS_CALLED)
+                    ->whereDate('created_at', $today);
             },
             // jumlah antrian dilayani (sekarang)
             'queues as dilayani_count' => function ($q) use ($today) {
-                $q->where('status', 'serving')
-                  ->whereDate('created_at', $today);
+                $q->where('status', Queue::STATUS_SERVING)
+                    ->whereDate('created_at', $today);
             },
-            // jumlah antrian selesai (completed + finished)
+            // Jumlah antrian selesai menggunakan status kanonis.
             'queues as selesai_count' => function ($q) use ($today) {
-                $q->whereIn('status', ['completed', 'finished'])
-                  ->whereDate('created_at', $today);
+                $q->where('status', Queue::STATUS_FINISHED)
+                    ->whereDate('created_at', $today);
             },
             // jumlah antrian batal/lewat
             'queues as batal_count' => function ($q) use ($today) {
-                $q->where('status', 'canceled')
-                  ->whereDate('created_at', $today);
+                $q->where('status', Queue::STATUS_CANCELED)
+                    ->whereDate('created_at', $today);
             },
         ])->where('is_active', true)->orderBy('name')->get(['id', 'name']);
     }
@@ -156,12 +162,12 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
     public function getRekapJumlahPemohon()
     {
         $from = now()->parse($this->from)->startOfDay();
-        $to   = now()->parse($this->to)->endOfDay();
+        $to = now()->parse($this->to)->endOfDay();
 
         return DB::table('instansis as i')
             ->select(
-                'i.instansi_id', 
-                'i.nama_instansi as name', 
+                'i.instansi_id',
+                'i.nama_instansi as name',
                 DB::raw('COUNT(q.id) as total_pemohon')
             )
             ->leftJoin('services as s', 's.instansi_id', '=', 'i.instansi_id')
@@ -173,7 +179,6 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
             ->orderBy('i.nama_instansi')
             ->get();
     }
-
 
     public function exportExcel()
     {
@@ -189,5 +194,4 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
         // Method ini akan dipanggil oleh JavaScript untuk refresh data
         // Livewire akan otomatis refresh komponen
     }
-
 }

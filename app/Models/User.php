@@ -4,20 +4,49 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 
+use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
-use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable implements FilamentUser
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    public const ROLE_ADMIN = 'admin';
+
+    public const ROLE_OPERATOR = 'operator';
+
+    public const ROLE_LABELS = [
+        self::ROLE_ADMIN => 'Admin',
+        self::ROLE_OPERATOR => 'Petugas Layanan',
+    ];
+
+    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
     public function canAccessPanel(Panel $panel): bool
     {
-        return true;
+        return in_array($this->role, array_keys(self::ROLE_LABELS), true);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === self::ROLE_ADMIN;
+    }
+
+    public function isOperator(): bool
+    {
+        return $this->role === self::ROLE_OPERATOR;
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (User $user): void {
+            if ($user->isDirty('password')) {
+                $user->password_changed_at = now();
+            }
+        });
     }
 
     /**
@@ -30,10 +59,10 @@ class User extends Authenticatable implements FilamentUser
         'username',
         'email',
         'password',
-        'plain_password',
         'role',
         'counter_id',
-        'service_id'
+        'service_id',
+        'password_changed_at',
     ];
 
     /**
@@ -56,6 +85,7 @@ class User extends Authenticatable implements FilamentUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'password_changed_at' => 'datetime',
         ];
     }
 
@@ -68,7 +98,7 @@ class User extends Authenticatable implements FilamentUser
     {
         return $this->belongsTo(Service::class);
     }
-    
+
     public function attendances()
     {
         return $this->hasMany(Attendance::class);

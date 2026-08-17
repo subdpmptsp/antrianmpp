@@ -19,7 +19,6 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use App\Filament\Resources\InstansiResource;
 use App\Filament\Pages\Auth\Login;
-use App\Http\Middleware\StartFilamentSession;
 
 
 class AdminPanelProvider extends PanelProvider
@@ -45,7 +44,7 @@ class AdminPanelProvider extends PanelProvider
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
-                StartFilamentSession::class, // Custom session middleware dengan cookie name berbeda
+                StartSession::class,
                 AuthenticateSession::class,
                 ShareErrorsFromSession::class,
                 VerifyCsrfToken::class,
@@ -57,13 +56,13 @@ class AdminPanelProvider extends PanelProvider
                 Authenticate::class,
             ])
             ->sidebarCollapsibleOnDesktop()
-            ->font('poppins')
+            ->spa()
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->navigationGroups([
-                'Queue Management',
-                'Display Kiosk',
-                'Laporan & Monitoring',
-                'Testing',
+                'Operasional',
+                'Master Data',
+                'Monitoring',
+                'Sistem',
             ]);
     }
 }

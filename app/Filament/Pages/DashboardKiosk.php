@@ -3,10 +3,8 @@
 namespace App\Filament\Pages;
 
 use App\Models\Counter;
-use App\Models\Queue;
 use App\Models\Setting;
 use Filament\Pages\Page;
-use Illuminate\Support\Facades\Log;
 
 class DashboardKiosk extends Page
 {
@@ -18,12 +16,11 @@ class DashboardKiosk extends Page
 
     protected static ?string $navigationLabel = 'Kiosk Ruang Tunggu';
 
-    protected static ?string $navigationGroup = 'Display Kiosk';
+    protected static ?string $navigationGroup = 'Operasional';
 
     public static function canAccess(): bool
     {
-        $user = \Illuminate\Support\Facades\Auth::user();
-        return $user && $user->role === 'admin';
+        return auth()->user()?->can('access-admin-area') ?? false;
     }
 
     public function getViewData(): array
@@ -47,28 +44,6 @@ class DashboardKiosk extends Page
             ->orderBy('name')
             ->orderBy('id')
             ->get();
-
-        // Pastikan nextQueue ter-load dengan benar untuk setiap counter
-        // Jika nextQueue tidak ter-load via relationship, load secara manual
-        foreach ($counters as $counter) {
-            if ($counter->service_id) {
-                // Pastikan nextQueue selalu ter-load, bahkan jika relationship tidak bekerja
-                if (!$counter->relationLoaded('nextQueue') || !$counter->nextQueue) {
-                    $nextQueue = Queue::where('service_id', $counter->service_id)
-                        ->where('status', 'waiting')
-                        ->whereNull('counter_id')
-                        ->whereNull('called_at')
-                        ->whereDate('created_at', now()->toDateString())
-                        ->orderBy('id', 'asc')
-                        ->first();
-                    $counter->setRelation('nextQueue', $nextQueue);
-                }
-            }
-        }
-
-        // Debug: Log counter names untuk memastikan semua zona ter-load
-        $zoneNames = $counters->pluck('name')->unique()->toArray();
-        Log::info('DashboardKiosk - Loaded counters:', ['zones' => $zoneNames, 'total' => $counters->count()]);
 
         return [
             'counters' => $counters,

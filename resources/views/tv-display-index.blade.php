@@ -6,7 +6,6 @@
     <title>TV Display - Pilih Zona</title>
     @vite(['resources/css/app.css'])
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
         
         * {
             font-family: 'Inter', sans-serif;
@@ -91,14 +90,13 @@
     </div>
 
     <script>
-        // Zone data
-        const zones = [
-            { id: 5, name: 'ZONA 1', services: 15, instansi: 1, color: 'from-blue-500 to-blue-600' },
-            { id: 20, name: 'ZONA 2', services: 9, instansi: 6, color: 'from-green-500 to-green-600' },
-            { id: 29, name: 'ZONA 3', services: 11, instansi: 5, color: 'from-purple-500 to-purple-600' },
-            { id: 40, name: 'ZONA 4', services: 10, instansi: 8, color: 'from-orange-500 to-orange-600' },
-            { id: 109, name: 'ZONA 5', services: 3, instansi: 3, color: 'from-pink-500 to-pink-600' }
-        ];
+        const zones = {{ Illuminate\Support\Js::from($zones) }};
+
+        function escapeHtml(value) {
+            const element = document.createElement('div');
+            element.textContent = String(value);
+            return element.innerHTML;
+        }
         
         // Update time
         function updateTime() {
@@ -120,11 +118,11 @@
             zones.forEach(zone => {
                 const zoneCard = document.createElement('div');
                 zoneCard.className = 'zone-card rounded-3xl p-8 text-center cursor-pointer';
-                zoneCard.onclick = () => window.open(`/tv-display/zona/${zone.id}`, '_blank');
+                zoneCard.onclick = () => zone.available && window.open(zone.url, '_blank');
                 
                 zoneCard.innerHTML = `
-                    <div class="zone-number text-${zone.color.split('-')[1]}-600 mb-4">${zone.name.split(' ')[1]}</div>
-                    <div class="zone-title text-gray-800 mb-6">${zone.name}</div>
+                    <div class="zone-number text-${zone.color}-600 mb-4">${zone.number}</div>
+                    <div class="zone-title text-gray-800 mb-6">${escapeHtml(zone.name)}</div>
                     
                     <div class="space-y-3 mb-6">
                         <div class="service-count inline-block">
@@ -136,7 +134,7 @@
                     </div>
                     
                     <div class="text-gray-600 text-sm">
-                        Klik untuk membuka TV Display
+                        ${zone.available ? 'Klik untuk membuka TV Display' : 'Counter zona belum dikonfigurasi'}
                     </div>
                     
                     <div class="mt-4">

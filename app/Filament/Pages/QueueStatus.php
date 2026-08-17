@@ -38,11 +38,23 @@ class QueueStatus extends BasePage
 
     public function loadData()
     {
-        if (!$this->id) return;
+        if (!$this->id) {
+            $this->queue = null;
+            return;
+        }
 
         $id = decode_id($this->id);
 
-        $this->queue = Queue::findOrFail($id);
+        if (!$id || $id < 1) {
+            $this->queue = null;
+            return;
+        }
+
+        $this->queue = Queue::with(['service', 'counter'])->find($id);
+
+        if (!$this->queue) {
+            return;
+        }
 
         $this->waitingCount = Queue::where('status', 'waiting')
             ->where('service_id', $this->queue->service_id)
@@ -50,7 +62,8 @@ class QueueStatus extends BasePage
             ->whereDate('created_at', $this->queue->created_at->format('Y-m-d'))
             ->count();
 
-        $this->currentQueues = Queue::where('status', 'serving')
+        $this->currentQueues = Queue::with('counter')
+            ->where('status', 'serving')
             ->where('service_id', $this->queue->service_id)
             ->get();
     }

@@ -3,36 +3,23 @@
 namespace App\Http\Controllers;
 
 use App\Models\Queue;
-use App\Models\Service;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\URL;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class BarcodeController extends Controller
 {
     public function show(Request $request)
     {
-        $serviceId = $request->query('service_id');
-        $queueId = $request->query('queue_id');
-        $zona = $request->query('zona', 'Zona 1');
+        $queue = $this->findQueue($request);
+        $service = $queue->service;
+        $zona = $service->instansi?->counter?->name ?? 'Zona';
 
-        $service = Service::with('instansi')->find($serviceId);
-        $queue = Queue::find($queueId);
-
-        if (!$service || !$queue) {
-            abort(404, 'Data tidak ditemukan.');
-        }
-
-        // Generate URL untuk scan barcode (akan redirect ke PDF)
-        // Gunakan IP address yang bisa diakses dari HP
-        $baseUrl = 'http://192.168.137.1:8000';
-        $scanUrl = $baseUrl . route('barcode.scan', [
-            'service_id' => $serviceId,
-            'queue_id' => $queueId,
-            'zona' => $zona
-        ], false);
+        $scanUrl = URL::temporarySignedRoute('barcode.scan', now()->endOfDay(), [
+            'queue_id' => $queue->id,
+        ]);
 
         // Log untuk debug
-        \Log::info('Barcode URL generated: ' . $scanUrl);
 
         // Generate QR Code
         $qrCode = QrCode::size(300)
@@ -57,39 +44,13 @@ class BarcodeController extends Controller
 
     public function scan(Request $request)
     {
-        $serviceId = $request->query('service_id');
-        $queueId = $request->query('queue_id');
-        $zona = $request->query('zona', 'Zona 1');
+        $queue = $this->findQueue($request);
+        $service = $queue->service;
+        $zona = $service->instansi?->counter?->name ?? 'Zona';
 
-        \Log::info('Barcode scan accessed with params:', [
-            'service_id' => $serviceId,
-            'queue_id' => $queueId,
-            'zona' => $zona,
-            'user_agent' => $request->header('User-Agent'),
-            'is_mobile' => $this->isMobile($request)
+        $pdfUrl = URL::temporarySignedRoute('struk.generate', now()->addMinutes(15), [
+            'queue_id' => $queue->id,
         ]);
-
-        $service = Service::with('instansi')->find($serviceId);
-        $queue = Queue::find($queueId);
-
-        if (!$service || !$queue) {
-            \Log::error('Service or Queue not found:', [
-                'service_id' => $serviceId,
-                'queue_id' => $queueId,
-                'service' => $service,
-                'queue' => $queue
-            ]);
-            abort(404, 'Data tidak ditemukan.');
-        }
-
-        // Generate PDF URL dengan IP address yang bisa diakses dari HP
-        $baseUrl = 'http://192.168.137.1:8000';
-        $pdfUrl = $baseUrl . route('struk.generate', [
-            'service_id' => $serviceId,
-            'zona' => $zona
-        ], false);
-
-        \Log::info('Redirecting to PDF URL: ' . $pdfUrl);
 
         // Untuk mobile, gunakan JavaScript redirect yang lebih reliable
         if ($this->isMobile($request)) {
@@ -97,27 +58,38 @@ class BarcodeController extends Controller
                 'pdfUrl' => $pdfUrl,
                 'service' => $service,
                 'queue' => $queue,
-                'zona' => $zona
+                'zona' => $zona,
             ]);
         }
 
         return redirect($pdfUrl);
     }
-    
-    private function isMobile($request)
+
+    private function findQueue(Request $request): Queue
+    {
+        $queueId = $request->integer('queue_id');
+        abort_if($queueId < 1, 404, 'Data tidak ditemukan.');
+
+        return Queue::query()
+            ->with('service.instansi.counter')
+            ->whereHas('service')
+            ->findOrFail($queueId);
+    }
+
+    private function isMobile(Request $request): bool
     {
         $userAgent = $request->header('User-Agent', '');
         $mobileKeywords = [
-            'Mobile', 'Android', 'iPhone', 'iPad', 'iPod', 
-            'BlackBerry', 'Windows Phone', 'Opera Mini'
+            'Mobile', 'Android', 'iPhone', 'iPad', 'iPod',
+            'BlackBerry', 'Windows Phone', 'Opera Mini',
         ];
-        
+
         foreach ($mobileKeywords as $keyword) {
             if (stripos($userAgent, $keyword) !== false) {
                 return true;
             }
         }
-        
+
         return false;
     }
 }

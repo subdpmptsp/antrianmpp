@@ -44,8 +44,7 @@ class AntrianSkckBerjalanPage extends SimplePage implements HasTable
                     ->whereDate('created_at', now()->toDateString())
             )
             ->columns([
-                TextColumn::make('nama')->label('Nama')
-                    ->searchable(),
+                TextColumn::make('masked_name')->label('Nama'),
                 TextColumn::make('antrian')->label('Nomor Antrian')
                     ->alignCenter()
                     ->formatStateUsing(fn($state) => str_pad($state, 3, '0', STR_PAD_LEFT)),

@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SIOLA MALL PELAYANAN PUBLIK - TV Display</title>
     @vite(['resources/css/app.css'])
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -358,12 +357,18 @@
         }
 
         // Check for new announcements
+        let lastAnnouncementId = null;
+
         async function checkForAnnouncements() {
             try {
-                const response = await fetch('/api/tv-display/latest-announcement');
+                const url = lastAnnouncementId
+                    ? `/api/tv-display/latest-announcement?after_id=${encodeURIComponent(lastAnnouncementId)}`
+                    : '/api/tv-display/latest-announcement';
+                const response = await fetch(url);
                 const data = await response.json();
                 
-                if (data && data.queueNumber) {
+                if (data && data.announcementId) {
+                    lastAnnouncementId = data.announcementId;
                     showAnnouncement(data);
                 }
             } catch (error) {

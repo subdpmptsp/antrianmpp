@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TV Display - Pemanggilan Antrian</title>
     @vite(['resources/css/app.css'])
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
         body {
@@ -117,13 +114,19 @@
         const announcementState = document.getElementById('announcementState');
         const audio = document.getElementById('announcementAudio');
         
+        let lastAnnouncementId = null;
+
         // Simulasi koneksi ke server (bisa diganti dengan WebSocket atau polling)
         function checkForAnnouncements() {
             // Polling ke server untuk mendapatkan announcement terbaru
-            fetch('/api/announcements/latest')
+            const url = lastAnnouncementId
+                ? `/api/announcements/latest?after_id=${encodeURIComponent(lastAnnouncementId)}`
+                : '/api/announcements/latest';
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
-                    if (data && data.queueNumber) {
+                    if (data && data.announcementId) {
+                        lastAnnouncementId = data.announcementId;
                         showAnnouncement(data);
                     }
                 })

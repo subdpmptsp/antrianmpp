@@ -23,10 +23,11 @@ class ServiceResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-cog';
 
+    protected static ?string $navigationGroup = 'Master Data';
 
     public static function canAccess(): bool
     {
-        return auth()->user()->role === 'admin';
+        return auth()->user()?->can('access-admin-area') ?? false;
     }
 
     public static function form(Form $form): Form

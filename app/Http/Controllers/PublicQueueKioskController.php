@@ -2,138 +2,113 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Counter;
-use App\Models\Service;
 use App\Models\Instansi;
-use App\Models\Queue;
+use App\Models\Service;
+use App\Services\KioskCatalogService;
+use App\Services\MasterDataCache;
+use App\Services\QueueService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 
 class PublicQueueKioskController extends Controller
 {
-    // Data counter yang sama seperti di QueueKiosk Page
-    private $counters = [
-        1 => ['name' => 'Zona 1','services' => ['Unit Pelayanan Pelayanan Terpadu Satu Pintu (UPTSP)']],
-        2 => ['name' => 'Zona 2','services' => ['Kepolisian Resor Kota Besar','Badan Narkotika Surabaya','Bagian Pengadaan','Bagian Pengadaan Barang/Jasa & Administrasi Pembangunan Kota Surabaya','PT Pos Indonesia','Badan Pendapatan Daerah']],
-        3 => ['name' => 'Zona 3','services' => ['Dinas Kependudukan dan Pencatatan Sipil','Pengadilan Negeri Surabaya','Pengadilan Tata Usaha Negeri Surabaya','Dinas Lingkungan Hidup','Dinas Perumahan Rakyat Kawasan Permukiman serta Tanaman (DPRKPP)']],
-        4 => ['name' => 'Zona 4','services' => ['BPJS Kesehatan','BPJS Ketenagakerjaan','Bursa Tenaga Kerja','Perumda Air Minum Surya Sembada','Direktorat Jenderal Pajak','Pengadilan Agama','Kantor Pertanahan Kota Surabaya I','Kantor Pertanahan Kota Surabaya II']],
-        5 => ['name' => 'Zona 5','services' => ['Kejaksaan Negeri Tanjung Perak','Kejaksaan Negeri Surabaya','Klinik Investasi']],
-    ];
+    public function __construct(
+        private readonly KioskCatalogService $catalog,
+        private readonly MasterDataCache $masterData,
+    ) {}
 
     public function index(Request $request)
     {
-        $selectedCounter = $request->get('zona');
-        $selectedInstansi = $request->get('instansi');
+        $counters = $this->catalog->zones();
+        $queueRequestToken = (string) Str::uuid();
+        $request->session()->put('queue_request_token', $queueRequestToken);
+
+        $selectedCounter = $request->integer('zona') ?: null;
+        $selectedInstansi = $request->integer('instansi') ?: null;
         $selectedService = $request->get('service');
 
         $instansis = collect();
         $services = collect();
 
         // Jika zona dipilih, ambil instansi
-        if ($selectedCounter && isset($this->counters[$selectedCounter])) {
-            $counterName = $this->counters[$selectedCounter]['name'];
-            $counterDb = Counter::whereRaw('UPPER(name) = UPPER(?)', [$counterName])->min('id');
-            
-            if ($counterDb) {
-                $instansis = Instansi::where('counter_id', $counterDb)
-                    ->orderBy('nama_instansi')
-                    ->get();
-                
+        if ($selectedCounter && isset($counters[$selectedCounter])) {
+            $counterId = $counters[$selectedCounter]['counter_id'];
+
+            if ($counterId) {
+                $instansis = $this->masterData->remember(
+                    "instansis:counter:{$counterId}",
+                    fn () => Instansi::where('counter_id', $counterId)
+                        ->orderBy('nama_instansi')
+                        ->get(),
+                );
+
                 // Auto-select instansi jika hanya ada satu dan belum dipilih
-                if ($instansis->count() === 1 && !$selectedInstansi) {
+                if ($instansis->count() === 1 && ! $selectedInstansi) {
                     $selectedInstansi = $instansis->first()->instansi_id;
                 }
             }
+        } else {
+            $selectedCounter = null;
         }
 
         // Jika instansi dipilih, ambil services
-        if ($selectedInstansi) {
-            $services = Service::where('instansi_id', $selectedInstansi)
-                ->orderBy('name')
-                ->get();
+        if ($selectedInstansi && $instansis->contains('instansi_id', $selectedInstansi)) {
+            $services = $this->masterData->remember(
+                "services:instansi:{$selectedInstansi}",
+                fn () => Service::where('instansi_id', $selectedInstansi)
+                    ->where('is_active', true)
+                    ->orderBy('name')
+                    ->get(),
+            );
+        } else {
+            $selectedInstansi = null;
         }
 
         return view('public.queue-kiosk', [
-            'counters' => $this->counters,
+            'counters' => $counters,
             'selectedCounter' => $selectedCounter,
             'selectedInstansi' => $selectedInstansi,
             'selectedService' => $selectedService,
             'instansis' => $instansis,
             'services' => $services,
+            'queueRequestToken' => $queueRequestToken,
         ]);
     }
 
-    public function selectInstansi(Request $request, $instansiId)
+    public function selectService(Request $request, $serviceId, QueueService $queueService)
     {
-        $selectedCounter = $request->get('zona');
-        
-        $services = Service::where('instansi_id', $instansiId)
-            ->orderBy('name')
-            ->get();
+        $submittedToken = $request->string('queue_request_token')->toString();
+        $expectedToken = (string) $request->session()->pull('queue_request_token', '');
 
-        return redirect()->route('public.queue-kiosk', [
-            'zona' => $selectedCounter,
-            'instansi' => $instansiId
-        ]);
-    }
-
-    public function selectService(Request $request, $serviceId)
-    {
-        Log::info('selectService called with serviceId: ' . $serviceId);
-        
-        $service = Service::find($serviceId);
-        if (!$service) {
+        if ($submittedToken === '' || $expectedToken === '' || ! hash_equals($expectedToken, $submittedToken)) {
             return redirect()->route('public.queue-kiosk')
-                ->with('error', 'Layanan tidak ditemukan!');
+                ->with('error', 'Permintaan tiket sudah diproses atau kedaluwarsa. Silakan pilih layanan kembali.');
         }
 
-        Log::info('Selected service: ' . $service->name);
+        $selectedCounter = $request->integer('zona');
+        $zone = $this->catalog->zones()[$selectedCounter] ?? null;
+        $service = Service::query()->with('instansi')->find($serviceId);
 
-        // Generate nomor antrian
-        $queueNumber = $this->generateQueueNumber($service);
-        Log::info('Generated queue number: ' . $queueNumber);
+        if (
+            ! $zone
+            || ! $zone['counter_id']
+            || ! $service
+            || ! $service->is_active
+            || ! $service->instansi
+            || (int) $service->instansi->counter_id !== (int) $zone['counter_id']
+        ) {
+            return redirect()->route('public.queue-kiosk')
+                ->with('error', 'Layanan tidak aktif atau tidak tersedia pada zona yang dipilih.');
+        }
 
-        // Simpan data antrian ke database
-        $queue = Queue::create([
-            'number' => $queueNumber,
-            'service_id' => $service->id,
-            'status' => 'waiting',
-            'created_at' => now(),
-        ]);
-        Log::info('Queue created with ID: ' . $queue->id);
-
-        // Tentukan zona
-        $selectedCounter = $request->get('zona', 1);
-        $zona = $this->counters[$selectedCounter]['name'] ?? 'Zona 1';
+        $queue = $queueService->addQueue($service->id);
 
         // Redirect ke PDF generator
-        $pdfUrl = route('struk.generate', [
-            'service_id' => $serviceId,
+        $pdfUrl = URL::temporarySignedRoute('struk.generate', now()->addMinutes(15), [
             'queue_id' => $queue->id,
-            'zona' => $zona
         ]);
-        Log::info('PDF URL generated: ' . $pdfUrl);
 
         return redirect($pdfUrl);
     }
-
-    private function generateQueueNumber($service)
-    {
-        $prefix = $service->prefix ?? 'A';
-        $padding = $service->padding ?? 0;
-
-        $lastQueue = Queue::where('service_id', $service->id)
-            ->whereDate('created_at', now()->toDateString())
-            ->orderBy('id', 'desc')
-            ->first();
-
-        $nextNumber = $lastQueue ? (intval(substr($lastQueue->number, strlen($prefix) + 1))) + 1 : 1;
-
-        if ($padding == 0) {
-            return $prefix . '-' . $nextNumber;
-        }
-
-        return $prefix . '-' . str_pad($nextNumber, $padding, '0', STR_PAD_LEFT);
-    }
 }
-

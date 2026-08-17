@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Services\AudioConfigurationService;
 use Filament\Pages\Page;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;
@@ -16,6 +17,7 @@ use Filament\Actions\Contracts\HasActions;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class AudioManagementPage extends Page implements HasForms, HasActions
 {
@@ -25,16 +27,17 @@ class AudioManagementPage extends Page implements HasForms, HasActions
     protected static string $view = 'filament.pages.audio-management';
     protected static ?string $title = 'Manajemen Audio';
     protected static ?string $navigationLabel = 'Manajemen Audio';
+    protected static ?string $navigationGroup = 'Sistem';
     protected static ?int $navigationSort = 10;
     
     public static function canAccess(): bool
     {
-        return \Illuminate\Support\Facades\Auth::user()->role === 'admin';
+        return auth()->user()?->can('access-admin-area') ?? false;
     }
     
     public static function shouldRegisterNavigation(): bool
     {
-        return \Illuminate\Support\Facades\Auth::user()->role === 'admin';
+        return static::canAccess();
     }
 
     public $audioUrl = '';
@@ -44,7 +47,11 @@ class AudioManagementPage extends Page implements HasForms, HasActions
 
     public function mount(): void
     {
-        $this->form->fill();
+        $audioConfig = app(AudioConfigurationService::class)->get();
+        $this->audioUrl = $audioConfig['url'] ?? '';
+        $this->audioName = $audioConfig['name'];
+        $this->audioDescription = $audioConfig['description'] ?? '';
+        $this->audioType = $audioConfig['type'];
     }
 
     public function form(Form $form): Form
@@ -104,6 +111,7 @@ class AudioManagementPage extends Page implements HasForms, HasActions
                         ->label('File Audio')
                         ->acceptedFileTypes(['audio/mpeg', 'audio/wav', 'audio/ogg'])
                         ->maxSize(10240) // 10MB
+                        ->storeFiles(false)
                         ->required(),
                     
                     TextInput::make('fileName')
@@ -143,16 +151,11 @@ class AudioManagementPage extends Page implements HasForms, HasActions
             'audioName' => 'required|string|max:255',
         ]);
 
-        // Simpan konfigurasi audio ke database atau config
-        // Untuk sekarang, simpan ke session atau cache
-        session([
-            'audio_config' => [
-                'url' => $this->audioUrl,
-                'name' => $this->audioName,
-                'description' => $this->audioDescription,
-                'type' => $this->audioType,
-                'updated_at' => now(),
-            ]
+        app(AudioConfigurationService::class)->save([
+            'url' => $this->audioUrl,
+            'name' => $this->audioName,
+            'description' => $this->audioDescription,
+            'type' => $this->audioType,
         ]);
 
         Notification::make()
@@ -165,21 +168,24 @@ class AudioManagementPage extends Page implements HasForms, HasActions
     public function uploadAudio(array $data): void
     {
         $file = $data['audioFile'];
-        $fileName = $data['fileName'];
+        $requestedName = pathinfo((string) $data['fileName'], PATHINFO_FILENAME);
+        $fileName = (Str::slug($requestedName) ?: 'audio') . '.' . $file->getClientOriginalExtension();
         
         // Simpan file ke storage
         $path = $file->storeAs('audio', $fileName, 'public');
         
-        // Simpan konfigurasi
-        session([
-            'audio_config' => [
-                'url' => Storage::url($path),
-                'name' => $fileName,
-                'description' => 'Uploaded audio file',
-                'type' => 'announcement',
-                'updated_at' => now(),
-            ]
+        $storedUrl = Storage::disk('public')->url($path);
+        app(AudioConfigurationService::class)->save([
+            'url' => $storedUrl,
+            'name' => $fileName,
+            'description' => 'Uploaded audio file',
+            'type' => 'announcement',
         ]);
+
+        $this->audioUrl = $storedUrl;
+        $this->audioName = $fileName;
+        $this->audioDescription = 'Uploaded audio file';
+        $this->audioType = 'announcement';
 
         Notification::make()
             ->title('Berhasil')
@@ -190,7 +196,7 @@ class AudioManagementPage extends Page implements HasForms, HasActions
 
     public function getViewData(): array
     {
-        $audioConfig = session('audio_config', []);
+        $audioConfig = app(AudioConfigurationService::class)->get();
         
         return [
             'audioConfig' => $audioConfig,

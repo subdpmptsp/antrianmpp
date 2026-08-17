@@ -3,8 +3,8 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use App\Models\User;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class SetPlainPasswordForExistingUsersSeeder extends Seeder
 {
@@ -13,21 +13,10 @@ class SetPlainPasswordForExistingUsersSeeder extends Seeder
      */
     public function run(): void
     {
-        // Set default password untuk user yang belum memiliki plain_password
-        $users = User::whereNull('plain_password')->orWhere('plain_password', '')->get();
-        
-        foreach ($users as $user) {
-            $defaultPassword = 'password123'; // Password default
-            
-            // Update plain_password dengan password default
-            $user->update([
-                'plain_password' => $defaultPassword,
-                'password' => Hash::make($defaultPassword)
-            ]);
-            
-            $this->command->info("Updated password for user: {$user->name} ({$user->email})");
+        if (Schema::hasColumn('users', 'plain_password')) {
+            DB::table('users')->update(['plain_password' => null]);
         }
-        
-        $this->command->info("Total users updated: " . $users->count());
+
+        $this->command?->warn('Plain-text password values have been cleared. Passwords were not reset.');
     }
 }

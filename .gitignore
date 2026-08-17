@@ -9,6 +9,11 @@
 .env
 .env.backup
 .env.production
+.env.testing
+/.codex_work
+/outputs
+/storage/backups/*.sql
+/*.sql
 .phpactor.json
 .phpunit.result.cache
 Homestead.json

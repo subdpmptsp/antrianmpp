@@ -28,10 +28,12 @@
 <script>
     // Test direct print
     function testDirectPrint() {
-        console.log('Direct print test clicked');
-        
-        // Test dengan service ID 1 (Pengambilan Izin)
-        const pdfUrl = '{{ route("struk.generate", ["service_id" => 1, "zona" => "Zona 1"]) }}';
+        const pdfUrl = @js($previewUrl);
+        if (!pdfUrl) {
+            alert('Belum ada layanan aktif untuk diuji.');
+            return;
+        }
+
         window.open(pdfUrl, '_blank');
     }
     

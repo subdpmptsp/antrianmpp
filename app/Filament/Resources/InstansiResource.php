@@ -20,16 +20,18 @@ class InstansiResource extends Resource
 
     protected static ?string $navigationLabel = 'Instansi';
 
+    protected static ?string $navigationGroup = 'Master Data';
+
     protected static ?string $Label = 'Instansi';
     
     public static function canAccess(): bool
     {
-        return \Illuminate\Support\Facades\Auth::user()->role === 'admin';
+        return auth()->user()?->can('access-admin-area') ?? false;
     }
     
     public static function canViewAny(): bool
     {
-        return \Illuminate\Support\Facades\Auth::user()->role === 'admin';
+        return static::canAccess();
     }
 
     public static function form(Form $form): Form

@@ -75,25 +75,19 @@
         
         <div class="info-box">
             <h3>Informasi:</h3>
-            <p><strong>Service ID:</strong> {{ $serviceId ?? 1 }}</p>
-            <p><strong>Zona:</strong> {{ $zona ?? 'Zona 1' }}</p>
-            <p><strong>URL Generate:</strong> <code>{{ route('struk.generate', ['service_id' => $serviceId ?? 1, 'zona' => $zona ?? 'Zona 1']) }}</code></p>
-            <p><strong>URL Preview:</strong> <code>{{ route('struk.preview', ['service_id' => $serviceId ?? 1, 'zona' => $zona ?? 'Zona 1']) }}</code></p>
+            <p><strong>Service ID:</strong> {{ $serviceId }}</p>
+            <p><strong>URL Preview:</strong> <code>{{ route('struk.preview', ['service_id' => $serviceId]) }}</code></p>
         </div>
         
         <div class="preview-actions">
-            <a href="{{ route('struk.generate', ['service_id' => $serviceId ?? 1, 'zona' => $zona ?? 'Zona 1']) }}" 
-               target="_blank" class="btn btn-success">
-                📄 Generate PDF (Simpan & Cetak)
-            </a>
-            <a href="{{ route('struk.preview', ['service_id' => $serviceId ?? 1, 'zona' => $zona ?? 'Zona 1']) }}" 
+            <a href="{{ route('struk.preview', ['service_id' => $serviceId]) }}"
                target="_blank" class="btn">
                 👁️ Preview PDF
             </a>
         </div>
         
         <iframe 
-            src="{{ route('struk.preview', ['service_id' => $serviceId ?? 1, 'zona' => $zona ?? 'Zona 1']) }}" 
+            src="{{ route('struk.preview', ['service_id' => $serviceId]) }}"
             class="preview-frame">
         </iframe>
     </div>

@@ -2,19 +2,17 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Resources\CounterResource\Pages;
 use App\Models\Counter;
 use App\Models\Service;
-use Filament\Forms;
-use Filament\Forms\Form;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\Select;
+use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Auth;
-use App\Filament\Resources\CounterResource\Pages;
 
 class CounterResource extends Resource
 {
@@ -23,27 +21,29 @@ class CounterResource extends Resource
     protected static ?string $navigationLabel = 'Manajemen Loket';
 
     protected static ?string $Label = 'Loket';
-    
+
     protected static ?string $navigationIcon = 'heroicon-o-building-storefront';
+
+    protected static ?string $navigationGroup = 'Master Data';
 
     public static function canAccess(): bool
     {
-        return Auth::user()->role === 'admin';
+        return auth()->user()?->can('access-admin-area') ?? false;
     }
 
     public static function canCreate(): bool
     {
-        return Auth::user()->role === 'admin';
+        return static::canAccess();
     }
 
     public static function canEdit(Model $record): bool
     {
-        return Auth::user()->role === 'admin';
+        return static::canAccess();
     }
 
     public static function canDelete(Model $record): bool
     {
-        return Auth::user()->role === 'admin';
+        return static::canAccess();
     }
 
     public static function form(Form $form): Form
@@ -81,15 +81,11 @@ class CounterResource extends Resource
                     ->label('Layanan')
                     ->options(function ($get) {
                         $instansiId = $get('instansi_id');
-                        if (!$instansiId) {
+                        if (! $instansiId) {
                             return [];
                         }
-                        
+
                         return Service::where('instansi_id', $instansiId)
-                            ->where(function($query) use ($get) {
-                                $query->whereNull('counter_id')
-                                      ->orWhere('id', $get('service_id'));
-                            })
                             ->pluck('name', 'id');
                     })
                     ->searchable()
@@ -136,8 +132,7 @@ class CounterResource extends Resource
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
-            ])
-            ->poll('5s');
+            ]);
     }
 
     public static function getPages(): array

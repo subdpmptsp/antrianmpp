@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: antrianmpp_testing
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, intl, pdo_mysql, zip, gd
+          coverage: none
+          tools: composer:v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Reject tracked secrets and database dumps
+        shell: bash
+        run: |
+          sensitive_files="$(git ls-files -- '*.sql' '.env' '.env.backup' '.env.production' '.env.testing')"
+          if [ -n "$sensitive_files" ]; then
+            echo "Sensitive runtime files must not be tracked:"
+            echo "$sensitive_files"
+            exit 1
+          fi
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Prepare isolated testing environment
+        run: |
+          cp .env.testing.example .env.testing
+          sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=root/' .env.testing
+          php artisan key:generate --env=testing
+          php artisan migrate:fresh --env=testing --seed --force
+
+      - name: Install and build frontend assets
+        run: |
+          npm ci
+          npm run build
+
+      - name: Audit locked dependencies
+        run: |
+          composer audit --locked --no-interaction
+          npm audit --package-lock-only --audit-level=high
+
+      - name: Run application tests
+        run: php artisan test

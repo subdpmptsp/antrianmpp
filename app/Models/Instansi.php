@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\InvalidatesMasterDataCache;
 use Illuminate\Database\Eloquent\Model;
 
 class Instansi extends Model
 {
+    use InvalidatesMasterDataCache;
+
     protected $table = 'instansis';
 
     protected $primaryKey = 'instansi_id';

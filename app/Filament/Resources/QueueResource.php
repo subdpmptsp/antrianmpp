@@ -2,23 +2,19 @@
 
 namespace App\Filament\Resources;
 
-use Carbon\Carbon;
-use Filament\Forms;
-use Filament\Tables;
+use App\Filament\Resources\QueueResource\Pages;
 use App\Models\Queue;
 use App\Models\Service;
-use Filament\Forms\Form;
-use Filament\Tables\Table;
-use Filament\Resources\Resource;
-use Filament\Tables\Filters\Filter;
-use Filament\Support\Enums\Alignment;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Request;
+use Carbon\Carbon;
+use Filament\Forms;
 use Filament\Forms\Components\DatePicker;
+use Filament\Resources\Resource;
+use Filament\Support\Enums\Alignment;
+use Filament\Tables;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use App\Filament\Resources\QueueResource\Pages;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Filament\Resources\QueueResource\RelationManagers;
+use Illuminate\Database\Eloquent\Model;
 
 class QueueResource extends Resource
 {
@@ -30,14 +26,16 @@ class QueueResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-queue-list';
 
+    protected static ?string $navigationGroup = 'Operasional';
+
     public static function canAccess(): bool
     {
-        return \Illuminate\Support\Facades\Auth::user()->role === 'admin';
+        return auth()->user()?->can('access-admin-area') ?? false;
     }
-    
+
     public static function canViewAny(): bool
     {
-        return \Illuminate\Support\Facades\Auth::user()->role === 'admin';
+        return static::canAccess();
     }
 
     public static function canCreate(): bool
@@ -55,7 +53,16 @@ class QueueResource extends Resource
         return false;
     }
 
-    
+    public static function canDelete(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return false;
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -67,23 +74,23 @@ class QueueResource extends Resource
                     ->alignment(Alignment::Center),
                 Tables\Columns\TextColumn::make('service.name')
                     ->label('Layanan')
-                    ->description(fn(Queue $record): string => optional($record->counter)->name ? "Loket: {$record->counter->name}" : "Loket: Belum dipanggil"),
+                    ->description(fn (Queue $record): string => optional($record->counter)->name ? "Loket: {$record->counter->name}" : 'Loket: Belum dipanggil'),
                 Tables\Columns\TextColumn::make('status'),
                 Tables\Columns\TextColumn::make('called_at')
                     ->label('Dipanggil')
-                    ->formatStateUsing(fn($state) => $state ? \Carbon\Carbon::parse($state)->format('(H:i), d M Y') : '-')
+                    ->formatStateUsing(fn ($state) => $state ? Carbon::parse($state)->format('(H:i), d M Y') : '-')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('served_at')
                     ->label('Dilayani')
-                    ->formatStateUsing(fn($state) => $state ? \Carbon\Carbon::parse($state)->format('(H:i), d M Y') : '-')
+                    ->formatStateUsing(fn ($state) => $state ? Carbon::parse($state)->format('(H:i), d M Y') : '-')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('canceled_at')
                     ->label('Dibatalkan')
-                    ->formatStateUsing(fn($state) => $state ? \Carbon\Carbon::parse($state)->format('(H:i), d M Y') : '-')
+                    ->formatStateUsing(fn ($state) => $state ? Carbon::parse($state)->format('(H:i), d M Y') : '-')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('finished_at')
                     ->label('Selesai')
-                    ->formatStateUsing(fn($state) => $state ? \Carbon\Carbon::parse($state)->format('(H:i), d M Y') : '-')
+                    ->formatStateUsing(fn ($state) => $state ? Carbon::parse($state)->format('(H:i), d M Y') : '-')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
@@ -99,7 +106,7 @@ class QueueResource extends Resource
                     ->form([
                         Forms\Components\Select::make('service_id')
                             ->label('Layanan')
-                            ->options(fn() => Service::all()->pluck('name', 'id'))
+                            ->options(fn () => Service::all()->pluck('name', 'id'))
                             ->placeholder('Semua Layanan'),
                     ])
                     ->query(function (Builder $query, array $data) {
@@ -108,8 +115,7 @@ class QueueResource extends Resource
                         }
                     })
                     ->indicateUsing(
-                        fn(array $data): ?string =>
-                        $data['service_id'] ? 'Layanan: ' . Service::find($data['service_id'])?->name : null
+                        fn (array $data): ?string => $data['service_id'] ? 'Layanan: '.Service::find($data['service_id'])?->name : null
                     ),
 
                 // 🔍 Filter Berdasarkan Status
@@ -118,10 +124,11 @@ class QueueResource extends Resource
                         Forms\Components\Select::make('status')
                             ->label('Status')
                             ->options([
-                                'waiting' => 'Menunggu',
-                                'serving' => 'Sedang Dilayani',
-                                'canceled' => 'Dibatalkan',
-                                'finished' => 'Selesai',
+                                Queue::STATUS_WAITING => 'Menunggu',
+                                Queue::STATUS_CALLED => 'Dipanggil',
+                                Queue::STATUS_SERVING => 'Sedang Dilayani',
+                                Queue::STATUS_CANCELED => 'Dibatalkan',
+                                Queue::STATUS_FINISHED => 'Selesai',
                             ])
                             ->placeholder('Semua Status'),
                     ])
@@ -131,8 +138,7 @@ class QueueResource extends Resource
                         }
                     })
                     ->indicateUsing(
-                        fn(array $data): ?string =>
-                        $data['status'] ? 'Status: ' . ucfirst($data['status']) : null
+                        fn (array $data): ?string => $data['status'] ? 'Status: '.ucfirst($data['status']) : null
                     ),
 
                 Filter::make('selected_date')
@@ -143,27 +149,19 @@ class QueueResource extends Resource
                             ->closeOnDateSelection(),
                     ])
                     ->query(
-                        fn(Builder $query, array $data) =>
-                        $data['selected_date']
+                        fn (Builder $query, array $data) => $data['selected_date']
                             ? $query->whereDate('created_at', $data['selected_date'])
                             : $query
                     )
                     ->indicateUsing(
-                        fn(array $data) =>
-                        $data['selected_date']
-                            ? 'Tanggal: ' . Carbon::parse($data['selected_date'])->format('d M Y')
+                        fn (array $data) => $data['selected_date']
+                            ? 'Tanggal: '.Carbon::parse($data['selected_date'])->format('d M Y')
                             : null
                     ),
 
             ], layout: Tables\Enums\FiltersLayout::AboveContent)
-            ->actions([
-                Tables\Actions\DeleteAction::make(),
-            ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
-            ]);
+            ->actions([])
+            ->bulkActions([]);
     }
 
     public static function getPages(): array

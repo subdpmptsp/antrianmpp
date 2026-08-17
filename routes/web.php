@@ -1,158 +1,173 @@
 <?php
 
-use App\Filament\Pages\QueueStatus;
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\ExportController;
-use App\Http\Controllers\QueueKioskController;
+use App\Exports\MonitoringRealtimeExport;
 use App\Exports\RekapLayananExport;
 use App\Filament\Pages\AntrianSkckBerjalanPage;
 use App\Filament\Pages\AntrianSkckPage;
-use Maatwebsite\Excel\Facades\Excel;
-use App\Http\Controllers\TicketController;
-use App\Http\Controllers\StrukController;
-use App\Http\Controllers\BarcodeController;
+use App\Filament\Pages\QueueStatus;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AudioController;
+use App\Http\Controllers\BarcodeController;
+use App\Http\Controllers\ExportController;
+use App\Http\Controllers\PublicQueueKioskController;
+use App\Http\Controllers\StrukController;
+use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TvDisplayController;
+use App\Models\Counter;
+use App\Models\Service;
+use App\Services\TvZoneResolver;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use Maatwebsite\Excel\Facades\Excel;
 
 Route::get('queue-status', QueueStatus::class)->name('queue.status');
 
-Route::middleware(['auth']) // atau middleware panel kamu sendiri jika pakai multi-panel
+Route::middleware(['auth', 'admin'])
     ->get('/exports/rekap-layanan', [ExportController::class, 'rekapLayanan'])
     ->name('export.rekap-layanan');
 
-Route::get('/export/rekap-jumlah-pemohon', function (\Illuminate\Http\Request $request) {
+Route::middleware(['auth', 'admin'])->get('/exports/monitoring-realtime', function (Request $request) {
+    return Excel::download(
+        new MonitoringRealtimeExport(
+            $request->string('instansi_id')->toString() ?: null,
+            $request->string('search')->toString() ?: null,
+        ),
+        'monitoring-realtime-'.now()->format('Y-m-d-His').'.xlsx',
+    );
+})->name('export.monitoring-realtime');
+
+Route::middleware(['auth', 'admin'])->get('/export/rekap-jumlah-pemohon', function (Request $request) {
     $from = $request->query('from', now()->toDateString());
-    $to   = $request->query('to', now()->toDateString());
+    $to = $request->query('to', now()->toDateString());
 
     return Excel::download(new RekapLayananExport($from, $to), 'rekap_jumlah_pemohon.xlsx');
 })->name('export.rekap-jumlah-pemohon');
 
-
 Route::get('/antrian-skck-mpp', AntrianSkckPage::class);
 Route::get('/antrian-skck-mpp/terdaftar', AntrianSkckBerjalanPage::class);
-Route::get('/antrian-skck-mpp/{id}',[ ExportController::class, 'cetakSkck']);
+Route::get('/antrian-skck-mpp/{id}', [ExportController::class, 'cetakSkck'])
+    ->middleware('signed')
+    ->name('skck.ticket');
 
 Route::get('/tampilan-tv', function () {
-    return view('tampilan_tv');
+    return redirect()->route('tv.index');
 });
 
 // PDF tiket antrian
-Route::get('/tickets/{queue}/pdf', [TicketController::class, 'queuePdf'])->name('tickets.pdf');
+Route::get('/tickets/{queue}/pdf', [TicketController::class, 'queuePdf'])
+    ->middleware('signed')
+    ->name('tickets.pdf');
 
 // PDF struk antrian
-Route::get('/struk/generate', [StrukController::class, 'generateStruk'])->name('struk.generate');
-Route::get('/struk/preview', [StrukController::class, 'previewStruk'])->name('struk.preview');
-Route::get('/struk/test', function() {
-    return view('pdf-preview', ['serviceId' => 1, 'zona' => 'Zona 1']);
-})->name('struk.test');
+Route::get('/struk/generate', [StrukController::class, 'generateStruk'])
+    ->middleware('signed')
+    ->name('struk.generate');
+
+Route::middleware(['auth', 'admin'])->group(function (): void {
+    Route::get('/struk/preview', [StrukController::class, 'previewStruk'])->name('struk.preview');
+    Route::get('/struk/test', function () {
+        abort_if(app()->isProduction(), 404);
+        $serviceId = Service::query()
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->value('id');
+        abort_unless($serviceId, 404, 'Belum ada layanan aktif.');
+
+        return view('pdf-preview', ['serviceId' => $serviceId]);
+    })->name('struk.test');
+    Route::get('/barcode/show', [BarcodeController::class, 'show'])->name('barcode.show');
+});
 
 // Barcode antrian
-Route::get('/barcode/show', [BarcodeController::class, 'show'])->name('barcode.show');
-Route::get('/barcode/scan', [BarcodeController::class, 'scan'])->name('barcode.scan');
+Route::get('/barcode/scan', [BarcodeController::class, 'scan'])
+    ->middleware('signed')
+    ->name('barcode.scan');
 
 // TV Display dan Announcement
-Route::get('/tv-display', function() {
-    return view('tv-display');
-})->name('tv.display');
+Route::get('/tv-display-legacy', function () {
+    return redirect()->route('tv.index');
+})->name('tv.display.legacy');
 
-Route::get('/tv-display-enhanced', function() {
-    return view('tv-display-enhanced');
+Route::get('/tv-display-enhanced', function () {
+    return redirect()->route('tv.index');
 })->name('tv.display.enhanced');
 
-Route::get('/tv-display-optimized', function() {
-    return view('tv-display-optimized');
+Route::get('/tv-display-optimized', function () {
+    return redirect()->route('tv.index');
 })->name('tv.display.optimized');
 Route::get('/api/announcements/latest', [AnnouncementController::class, 'getLatestAnnouncement'])->name('api.announcements.latest');
 Route::get('/api/tv-display/queue-status', [TvDisplayController::class, 'getQueueStatus'])->name('api.tv.queue-status');
 Route::get('/api/tv-display/latest-announcement', [TvDisplayController::class, 'getLatestAnnouncement'])->name('api.tv.latest-announcement');
 
 // TV Display Index (Public - No Auth Required)
-Route::get('/tv-display', function() {
-    return view('tv-display-index');
-})->name('tv.display.index');
+Route::get('/tv-display', [TvDisplayController::class, 'index'])->name('tv.display');
 
-// TV Display per Zona (Public - No Auth Required)
-Route::get('/tv-display/zona/{zoneId}', function($zoneId) {
-    $zoneCounter = \App\Models\Counter::where('id', $zoneId)->first();
-    if (!$zoneCounter) {
+// TV Display per Zona
+Route::get('/tv-display/zona/{zoneId}', function ($zoneId) {
+    $zoneCounter = Counter::where('id', $zoneId)->first();
+    if (! $zoneCounter) {
         abort(404, 'Zone not found');
     }
-    
-    return view('tv-display-zone', [
+
+    return view('tv-simple', [
         'zoneId' => $zoneId,
-        'zoneName' => $zoneCounter->name
+        'zoneName' => $zoneCounter->name,
     ]);
-})->name('tv.display.zone');
+})->middleware('device:tv-zone-api')->name('tv.display.zone');
 
 // TV Display Public Routes (Short URLs for easy access)
-Route::get('/tv', function() {
-    return view('tv-landing');
-})->name('tv.index');
+Route::get('/tv', [TvDisplayController::class, 'landing'])->name('tv.index');
 
 // Redirect root to admin login
-Route::get('/', function() {
+Route::get('/', function () {
     return redirect('/admin');
 })->name('home');
 
 // Simple TV Display (Direct access without login)
-Route::get('/tv-simple', function() {
-    return view('tv-simple', [
-        'zoneId' => 5,
-        'zoneName' => 'ZONA 1'
-    ]);
-})->name('tv.simple');
+Route::get('/tv-simple', function () {
+    $resolver = app(TvZoneResolver::class);
+    $counter = $resolver->resolve(1);
 
-Route::get('/tv1', function() {
-    $zoneCounter = \App\Models\Counter::where('id', 5)->first();
     return view('tv-simple', [
-        'zoneId' => 5,
-        'zoneName' => $zoneCounter->name
+        'zoneId' => $counter?->id ?? 0,
+        'zoneName' => $counter?->name ?? $resolver->fallbackName(1),
     ]);
-})->name('tv.zona1');
+})->middleware('device:tv,1')->name('tv.simple');
 
-Route::get('/tv2', function() {
-    $zoneCounter = \App\Models\Counter::where('id', 20)->first();
-    return view('tv-simple', [
-        'zoneId' => 20,
-        'zoneName' => $zoneCounter->name
-    ]);
-})->name('tv.zona2');
+$tvZones = array_keys(config('tv.zones', []));
 
-Route::get('/tv3', function() {
-    $zoneCounter = \App\Models\Counter::where('id', 29)->first();
-    return view('tv-simple', [
-        'zoneId' => 29,
-        'zoneName' => $zoneCounter->name
-    ]);
-})->name('tv.zona3');
+foreach ($tvZones as $zoneNumber) {
+    Route::get("/tv{$zoneNumber}", function () use ($zoneNumber) {
+        $resolver = app(TvZoneResolver::class);
+        $counter = $resolver->resolve($zoneNumber);
 
-Route::get('/tv4', function() {
-    $zoneCounter = \App\Models\Counter::where('id', 40)->first();
-    return view('tv-simple', [
-        'zoneId' => 40,
-        'zoneName' => $zoneCounter->name
-    ]);
-})->name('tv.zona4');
-
-Route::get('/tv5', function() {
-    $zoneCounter = \App\Models\Counter::where('id', 109)->first();
-    return view('tv-simple', [
-        'zoneId' => 109,
-        'zoneName' => $zoneCounter->name
-    ]);
-})->name('tv.zona5');
+        return view('tv-simple', [
+            'zoneId' => $counter?->id ?? 0,
+            'zoneName' => $counter?->name ?? $resolver->fallbackName($zoneNumber),
+        ]);
+    })->middleware("device:tv,{$zoneNumber}")->name("tv.zona{$zoneNumber}");
+}
 
 // API untuk data per zona
-Route::get('/api/tv-display/zone/{zoneId}/services', [TvDisplayController::class, 'getZoneServices'])->name('api.tv.zone.services');
-Route::get('/api/tv-display/zone/{zoneId}/queues', [TvDisplayController::class, 'getZoneQueues'])->name('api.tv.zone.queues');
+Route::middleware('device:tv-zone-api')->group(function () {
+    Route::get('/api/tv-display/zone/{zoneId}/services', [TvDisplayController::class, 'getZoneServices'])->name('api.tv.zone.services');
+    Route::get('/api/tv-display/zone/{zoneId}/queues', [TvDisplayController::class, 'getZoneQueues'])->name('api.tv.zone.queues');
+});
 
 // Audio API
-Route::get('/api/audio/announcement', [AudioController::class, 'getAnnouncementAudio'])->name('api.audio.announcement');
-Route::post('/api/audio/upload', [AudioController::class, 'uploadAudio'])->name('api.audio.upload');
-Route::get('/api/audio/list', [AudioController::class, 'getAudioList'])->name('api.audio.list');
-Route::delete('/api/audio/delete', [AudioController::class, 'deleteAudio'])->name('api.audio.delete');
+Route::get('/api/audio/announcement', [AudioController::class, 'getAnnouncementAudio'])
+    ->middleware(['auth', 'throttle:20,1'])
+    ->name('api.audio.announcement');
+Route::middleware(['auth', 'admin'])->group(function () {
+    Route::get('/api/audio/list', [AudioController::class, 'getAudioList'])->name('api.audio.list');
+    Route::post('/api/audio/upload', [AudioController::class, 'uploadAudio'])->name('api.audio.upload');
+    Route::delete('/api/audio/delete', [AudioController::class, 'deleteAudio'])->name('api.audio.delete');
+});
 
-// Public Queue Kiosk (No Login Required)
-Route::get('/kiosk/cetak-antrian', [App\Http\Controllers\PublicQueueKioskController::class, 'index'])->name('public.queue-kiosk');
-Route::get('/kiosk/cetak-antrian/select-service/{serviceId}', [App\Http\Controllers\PublicQueueKioskController::class, 'selectService'])->name('public.queue-kiosk.select-service');
+// Public Queue Kiosk (authorized device only when DEVICE_AUTH_ENABLED=true)
+Route::get('/kiosk/cetak-antrian', [PublicQueueKioskController::class, 'index'])
+    ->middleware('device:kiosk')
+    ->name('public.queue-kiosk');
+Route::post('/kiosk/cetak-antrian/select-service/{serviceId}', [PublicQueueKioskController::class, 'selectService'])
+    ->middleware(['device:kiosk', 'throttle:30,1'])
+    ->name('public.queue-kiosk.select-service');

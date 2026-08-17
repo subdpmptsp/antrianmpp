@@ -21,8 +21,10 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rule;
 
 class AntrianSkckPage extends SimplePage implements HasForms
 {
@@ -57,12 +59,18 @@ class AntrianSkckPage extends SimplePage implements HasForms
                     ->required(),
                 TextInput::make('nik')
                     ->required()
-                    ->unique()
+                    ->rules([
+                        Rule::unique('antrian_skcks', 'nik')
+                            ->where('queue_date', now()->toDateString()),
+                    ])
                     ->minLength(16)
                     ->label("NIK"),
                 TextInput::make('nomor_whatsapp')
                     ->required()
-                    ->unique()
+                    ->rules([
+                        Rule::unique('antrian_skcks', 'nomor_whatsapp')
+                            ->where('queue_date', now()->toDateString()),
+                    ])
                     ->label("Nomor Whatsapp"),
                 Turnstile::make('turnstile')
                     ->theme('light')
@@ -102,10 +110,14 @@ class AntrianSkckPage extends SimplePage implements HasForms
                                     'nik'            => $data['nik'],
                                     'nomor_whatsapp' => $data['nomor_whatsapp'],
                                     'antrian'        => $next,
+                                    'queue_date'     => $today,
                                 ]);
                             });
 
-                            $this->js('window.open("' . '/antrian-skck-mpp/SKCK' . $antrian->id . '", "_blank");');
+                            $ticketUrl = URL::temporarySignedRoute('skck.ticket', now()->addMinutes(10), [
+                                'id' => 'SKCK' . $antrian->id,
+                            ]);
+                            $this->js('window.open(' . json_encode($ticketUrl) . ', "_blank");');
                         }),
                     Action::make('Cetak Ulang Antrian')
                         ->extraAttributes([
@@ -119,7 +131,10 @@ class AntrianSkckPage extends SimplePage implements HasForms
                         })
                         ->action(function ($data) {
                             $nik = $data['nik'];
-                            $antrian = AntrianSkck::where('nik', $nik)->first();
+                            $antrian = AntrianSkck::where('nik', $nik)
+                                ->where('queue_date', now()->toDateString())
+                                ->latest('id')
+                                ->first();
 
                             if ($antrian == null) {
                                 Notification::make('fail')
@@ -130,7 +145,10 @@ class AntrianSkckPage extends SimplePage implements HasForms
                                 return;
                             }
 
-                            $this->js('window.open("' . '/antrian-skck-mpp/SKCK' . $antrian->id . '", "_blank");');
+                            $ticketUrl = URL::temporarySignedRoute('skck.ticket', now()->addMinutes(10), [
+                                'id' => 'SKCK' . $antrian->id,
+                            ]);
+                            $this->js('window.open(' . json_encode($ticketUrl) . ', "_blank");');
                         }),
                     Action::make('Cek Antrian Terdaftar')
                         ->extraAttributes([

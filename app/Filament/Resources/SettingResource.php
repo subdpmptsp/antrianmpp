@@ -23,9 +23,11 @@ class SettingResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
 
+    protected static ?string $navigationGroup = 'Sistem';
+
     public static function canAccess(): bool
     {
-        return auth()->user()->role === 'admin';
+        return auth()->user()?->can('access-admin-area') ?? false;
     }
 
     public static function canCreate(): bool

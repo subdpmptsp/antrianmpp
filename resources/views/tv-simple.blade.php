@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TV Display - {{ $zoneName ?? 'Zona' }}</title>
     @vite(['resources/css/app.css'])
-    <script src="https://code.responsivevoice.org/responsivevoice.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
         
         * {
             font-family: 'Inter', sans-serif;
@@ -194,6 +192,14 @@
         let currentZone = '{{ $zoneId ?? 1 }}';
         let announcementQueue = [];
         let isAnnouncing = false;
+        const announcementStorageKey = `tv:last-announcement:${currentZone}`;
+        let lastAnnouncementId = sessionStorage.getItem(announcementStorageKey);
+
+        function escapeHtml(value) {
+            const element = document.createElement('div');
+            element.textContent = String(value ?? '');
+            return element.innerHTML;
+        }
         
         // Update time
         function updateTime() {
@@ -223,26 +229,21 @@
                         
                         let statusClass = 'status-available';
                         let statusText = 'Tersedia';
-                        let buttonClass = 'bg-blue-500 hover:bg-blue-600';
-                        let buttonText = 'Dilayani';
-                        
+
                         if (queue.status === 'serving') {
                             statusClass = 'status-serving';
                             statusText = 'Melayani';
-                            buttonClass = 'bg-green-500 hover:bg-green-600';
                         } else if (queue.status === 'called') {
                             statusClass = 'status-waiting';
                             statusText = 'Dipanggil';
-                            buttonClass = 'bg-yellow-500 hover:bg-yellow-600';
-                        } else if (queue.status === 'cancelled') {
+                        } else if (queue.status === 'canceled') {
                             statusClass = 'status-cancelled';
                             statusText = 'Dibatalkan';
-                            buttonClass = 'bg-red-500 hover:bg-red-600';
                         }
                         
                         queueCard.innerHTML = `
                             <div class="flex items-center justify-between mb-6">
-                                <h3 class="font-bold text-gray-800 text-xl">${queue.counter_name}</h3>
+                                <h3 class="font-bold text-gray-800 text-xl">${escapeHtml(queue.counter_name)}</h3>
                                 <div class="flex items-center space-x-3">
                                     <div class="status-dot ${statusClass}"></div>
                                     <span class="text-sm font-medium text-gray-600">${statusText}</span>
@@ -251,13 +252,13 @@
                             
                             <div class="mb-8">
                                 ${queue.queue_number ? `
-                                    <div class="queue-number text-blue-600 mb-4">${queue.queue_number}</div>
-                                    <div class="service-name text-gray-800 mb-4">${queue.service_name}</div>
+                                    <div class="queue-number text-blue-600 mb-4">${escapeHtml(queue.queue_number)}</div>
+                                    <div class="service-name text-gray-800 mb-4">${escapeHtml(queue.service_name)}</div>
                                     <div class="flex items-center justify-center text-gray-600 text-lg">
                                         <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path>
                                         </svg>
-                                        ${queue.called_at || 'Belum dipanggil'}
+                                        ${escapeHtml(queue.called_at || 'Belum dipanggil')}
                                     </div>
                                 ` : `
                                     <div class="text-6xl text-gray-400 mb-4">⏸️</div>
@@ -266,9 +267,9 @@
                                 `}
                             </div>
                             
-                            <button class="w-full ${buttonClass} text-white font-bold py-4 px-6 rounded-xl transition-colors text-lg">
-                                ${buttonText}
-                            </button>
+                            <div class="w-full bg-gray-100 text-gray-700 font-bold py-4 px-6 rounded-xl text-lg">
+                                Tampilan hanya-baca
+                            </div>
                         `;
                         
                         container.appendChild(queueCard);
@@ -320,7 +321,7 @@
                 instansiText = 'U-P-T-S-P';
             }
             
-            const announcementText = `nomor antrian ${data.queueNumber}, layanan ${data.serviceName.toLowerCase()}, menuju ke loket ${data.servicePrefix || 'A'}, ${instansiText}`;
+            const announcementText = `nomor antrian ${data.queueNumber}, layanan ${data.serviceName.toLowerCase()}, menuju ke ${data.counterName}, ${instansiText}`;
             
             if (typeof responsiveVoice !== 'undefined') {
                 responsiveVoice.speak(announcementText, 'Indonesian Female', {
@@ -350,11 +351,29 @@
                 }
             }, 6000);
         }
-        
-        // Listen for announcements
-        window.addEventListener('announce-queue', (event) => {
-            playAnnouncement(event.detail);
-        });
+
+        async function checkForAnnouncements() {
+            try {
+                const params = new URLSearchParams({ zone_id: currentZone });
+                if (lastAnnouncementId) {
+                    params.set('after_id', lastAnnouncementId);
+                }
+
+                const response = await fetch(`/api/tv-display/latest-announcement?${params.toString()}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (data && data.announcementId) {
+                    lastAnnouncementId = data.announcementId;
+                    sessionStorage.setItem(announcementStorageKey, lastAnnouncementId);
+                    playAnnouncement(data);
+                }
+            } catch (error) {
+                console.error('Error checking announcements:', error);
+            }
+        }
         
         // Auto-refresh data
         function refreshData() {
@@ -367,11 +386,8 @@
         
         refreshData();
         setInterval(refreshData, 3000); // Refresh every 3 seconds
-        
-        // Listen for Livewire events
-        window.addEventListener('announce-queue', (event) => {
-            playAnnouncement(event.detail);
-        });
+        checkForAnnouncements();
+        setInterval(checkForAnnouncements, 2000);
     </script>
 </body>
 </html>

@@ -1,7 +1,4 @@
 <x-filament-panels::page>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
         body, .fi-body {
@@ -128,17 +125,8 @@
 
         {{-- Main Content --}}
         @php
-            // Debug: Pastikan counter terpilih
             $selectedCounter = $this->selectedCounter;
             $selectedCounterId = $this->selectedCounterId;
-            
-            // Jika operator dan counter belum terpilih, coba ambil dari user
-            if (!$selectedCounter && auth()->check() && auth()->user()->role === 'operator' && auth()->user()->counter_id) {
-                $selectedCounterId = auth()->user()->counter_id;
-                $selectedCounter = \App\Models\Counter::withoutGlobalScopes()
-                    ->with(['service', 'instansi', 'assignedServices'])
-                    ->find($selectedCounterId);
-            }
         @endphp
         
         @if ($selectedCounter)
@@ -453,7 +441,6 @@
     </audio>
 
     <!-- ResponsiveVoice Script -->
-    <script src="https://code.responsivevoice.org/responsivevoice.js"></script>
 
     <!-- Notification untuk tampilan TV -->
     <div id="tvNotification" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
@@ -800,10 +787,7 @@
                 console.log('=== FETCHING AUDIO FROM API ===');
                 
                 const params = new URLSearchParams({
-                    queueNumber: data.queueNumber || '',
-                    serviceName: data.serviceName || '',
-                    counterName: data.counterName || '',
-                    zona: data.zona || ''
+                    queue_id: data.queueId || ''
                 });
                 
                 fetch(`/api/audio/announcement?${params}`)

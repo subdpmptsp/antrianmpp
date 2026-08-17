@@ -1,3 +1,11 @@
+@if (!$queue)
+<div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center px-4">
+    <div class="max-w-lg w-full bg-white rounded-3xl shadow-xl border border-gray-100 p-8 text-center">
+        <h1 class="text-2xl font-bold text-gray-900 mb-3">Status Antrian Tidak Tersedia</h1>
+        <p class="text-gray-600">Kode antrian tidak ditemukan atau belum disertakan. Silakan pindai ulang QR/barcode pada tiket Anda.</p>
+    </div>
+</div>
+@else
 <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50" wire:poll.5000ms="loadData">
     <!-- Header dengan glassmorphism effect -->
     <div class="relative pt-8 pb-6">
@@ -11,7 +19,7 @@
             <h1 class="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent mb-2">
                 Status Antrian
             </h1>
-            <p class="text-lg text-gray-600 font-medium">{{ $queue->service->name }}</p>
+            <p class="text-lg text-gray-600 font-medium">{{ $queue->service?->name ?? 'Layanan tidak tersedia' }}</p>
             <p class="text-sm text-gray-500 mt-1">{{ now()->format('d M Y H:i') }}</p>
         </div>
     </div>
@@ -74,7 +82,7 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
                             </svg>
                         </div>
-                        <p class="text-sm text-gray-600 mb-2">{{ $currentQueue->counter->name }}</p>
+                        <p class="text-sm text-gray-600 mb-2">{{ $currentQueue->counter?->name ?? 'Loket belum ditentukan' }}</p>
                         <p class="text-2xl font-bold text-blue-600">{{ $currentQueue->number }}</p>
                         <div class="mt-3 flex items-center justify-center">
                             <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
@@ -105,3 +113,4 @@
         </div>
     </div>
 </div>
+@endif

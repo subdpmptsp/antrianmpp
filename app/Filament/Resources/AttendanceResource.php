@@ -25,16 +25,16 @@ class AttendanceResource extends Resource
     
     protected static ?string $navigationLabel = 'Absensi Petugas';
     
-    protected static ?string $navigationGroup = 'Queue Management';
+    protected static ?string $navigationGroup = 'Monitoring';
 
     public static function canViewAny(): bool
     {
-        return Auth::check() && Auth::user()->role === 'admin';
+        return auth()->user()?->can('access-admin-area') ?? false;
     }
 
     public static function canAccess(): bool
     {
-        return Auth::check() && Auth::user()->role === 'admin';
+        return static::canViewAny();
     }
 
     public static function form(Form $form): Form

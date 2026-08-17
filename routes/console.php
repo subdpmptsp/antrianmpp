@@ -13,3 +13,8 @@ Schedule::command('attendance:reset-daily')
     ->dailyAt('00:00')
     ->timezone('Asia/Jakarta')
     ->withoutOverlapping();
+
+Schedule::command('audio:cleanup-generated --days=7')
+    ->dailyAt('02:00')
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping();

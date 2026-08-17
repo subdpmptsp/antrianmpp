@@ -6,7 +6,6 @@
     <title>TV Display - Pilih Zona</title>
     @vite(['resources/css/app.css'])
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
         
         * {
             font-family: 'Inter', sans-serif;
@@ -108,14 +107,13 @@
     </div>
 
     <script>
-        // Zone data
-        const zones = [
-            { id: 5, name: 'ZONA 1', services: 15, instansi: 1, color: 'blue' },
-            { id: 20, name: 'ZONA 2', services: 9, instansi: 6, color: 'green' },
-            { id: 29, name: 'ZONA 3', services: 11, instansi: 5, color: 'purple' },
-            { id: 40, name: 'ZONA 4', services: 10, instansi: 8, color: 'orange' },
-            { id: 109, name: 'ZONA 5', services: 3, instansi: 3, color: 'pink' }
-        ];
+        const zones = {{ Illuminate\Support\Js::from($zones) }};
+
+        function escapeHtml(value) {
+            const element = document.createElement('div');
+            element.textContent = String(value);
+            return element.innerHTML;
+        }
         
         // Update time
         function updateTime() {
@@ -137,11 +135,11 @@
             zones.forEach(zone => {
                 const zoneCard = document.createElement('div');
                 zoneCard.className = 'zone-card rounded-3xl p-10 text-center';
-                zoneCard.onclick = () => window.open(`/tv${zone.id === 5 ? '1' : zone.id === 20 ? '2' : zone.id === 29 ? '3' : zone.id === 40 ? '4' : '5'}`, '_blank');
+                zoneCard.onclick = () => zone.available && window.open(zone.url, '_blank');
                 
                 zoneCard.innerHTML = `
-                    <div class="zone-number text-${zone.color}-600 mb-6">${zone.name.split(' ')[1]}</div>
-                    <div class="zone-title text-gray-800 mb-8">${zone.name}</div>
+                    <div class="zone-number text-${zone.color}-600 mb-6">${zone.number}</div>
+                    <div class="zone-title text-gray-800 mb-8">${escapeHtml(zone.name)}</div>
                     
                     <div class="space-y-4 mb-8">
                         <div class="service-count inline-block">
@@ -153,7 +151,7 @@
                     </div>
                     
                     <div class="text-gray-600 text-lg mb-6">
-                        Klik untuk membuka TV Display
+                        ${zone.available ? 'Klik untuk membuka TV Display' : 'Counter zona belum dikonfigurasi'}
                     </div>
                     
                     <div class="auto-refresh">

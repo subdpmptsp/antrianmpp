@@ -302,6 +302,12 @@
 </head>
 <body>
     <div class="container-main">
+        @if(session('error'))
+            <div class="mx-auto mt-4 max-w-3xl rounded-xl bg-red-100 px-5 py-3 text-center font-semibold text-red-800">
+                {{ session('error') }}
+            </div>
+        @endif
+
         @if(!$selectedCounter)
             {{-- ===== PILIH ZONA ===== --}}
             <div class="header-full-width flex items-center justify-between px-6 py-4" style="background-color:#0D009A;">
@@ -478,12 +484,15 @@
                         <div class="relative mx-auto max-w-6xl px-6 pb-10 pt-6">
                             <div class="flex flex-wrap gap-6 md:gap-8 justify-center">
                                 @forelse($services as $service)
-                                    <a href="{{ route('public.queue-kiosk.select-service', ['serviceId' => $service->id, 'zona' => $selectedCounter]) }}"
-                                        class="mpp-chip group">
+                                    <form method="POST" action="{{ route('public.queue-kiosk.select-service', ['serviceId' => $service->id, 'zona' => $selectedCounter]) }}">
+                                        @csrf
+                                        <input type="hidden" name="queue_request_token" value="{{ $queueRequestToken }}">
+                                        <button type="submit" class="mpp-chip group">
                                         <span class="mpp-chip-label">
                                             {{ $service->name ?? $service->nama_service ?? '-' }}
                                         </span>
-                                    </a>
+                                        </button>
+                                    </form>
                                 @empty
                                     <div class="text-center text-white/90 py-10">
                                         Belum ada layanan untuk instansi ini.
@@ -498,4 +507,3 @@
     </div>
 </body>
 </html>
-

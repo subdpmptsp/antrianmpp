@@ -1,4 +1,4 @@
-<div class="flex flex-col flex-grow p-4 lg:p-8 relative overflow-hidden" wire:poll.500ms="refreshData">
+<div class="flex flex-col flex-grow p-4 lg:p-8 relative overflow-hidden" wire:poll.2s="refreshData">
 <!-- Fullscreen Button -->
     <button id="fullscreen-btn" class="fixed top-6 right-6 z-50 w-14 h-14 bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 flex items-center justify-center hover:bg-gradient-to-br hover:from-blue-600 hover:to-indigo-600 hover:text-white transition-all duration-300 group">
         <svg class="w-7 h-7 text-gray-700 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -31,8 +31,7 @@
                     $nextQueue = null;
                     $serviceCountersActive = $serviceCounters->where('is_active', true);
                     
-                    // Cari nextQueue dari counter manapun dalam service group ini
-                    // Jika tidak ditemukan via relationship, query langsung
+                    // Cari nextQueue dari relasi yang sudah dimuat oleh page.
                     foreach ($serviceCountersActive as $counter) {
                         if ($counter->nextQueue) {
                             $nextQueue = $counter->nextQueue;
@@ -40,20 +39,6 @@
                         }
                     }
                     
-                    // Fallback: jika nextQueue tidak ditemukan via relationship, query langsung
-                    if (!$nextQueue && $serviceCountersActive->count() > 0) {
-                        $firstCounter = $serviceCountersActive->first();
-                        if ($firstCounter && $firstCounter->service_id) {
-                            $nextQueue = \App\Models\Queue::where('service_id', $firstCounter->service_id)
-                                ->where('status', 'waiting')
-                                ->whereNull('counter_id')
-                                ->whereNull('called_at')
-                                ->whereDate('created_at', now()->toDateString())
-                                ->orderBy('id', 'asc')
-                                ->first();
-                        }
-                    }
-
                     $hasActiveCounters = $serviceCountersActive->count() > 0;
                     $hasAvailableCounters = $serviceCountersActive->where('is_available', true)->count() > 0;
 
@@ -238,20 +223,8 @@
                         <div class="flex-grow flex flex-col items-center justify-center p-8 text-center">
                             @if ($counter->is_active)
                                 @php
-                                    // Prioritaskan activeQueue (yang sedang dipanggil/dilayani)
-                                    // Jika tidak ada, tampilkan nextQueue (antrian waiting berikutnya)
+                                    // Relasi sudah dimuat di page; Blade tidak boleh melakukan query database.
                                     $displayQueue = $counter->activeQueue ?? $counter->nextQueue;
-                                    
-                                    // Fallback: jika nextQueue tidak ter-load via relationship, query langsung
-                                    if (!$displayQueue && $counter->service_id) {
-                                        $displayQueue = \App\Models\Queue::where('service_id', $counter->service_id)
-                                            ->where('status', 'waiting')
-                                            ->whereNull('counter_id')
-                                            ->whereNull('called_at')
-                                            ->whereDate('created_at', now()->toDateString())
-                                            ->orderBy('id', 'asc')
-                                            ->first();
-                                    }
                                 @endphp
                                 @if ($displayQueue)
                                     <div class="mb-4">
