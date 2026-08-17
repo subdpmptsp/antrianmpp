@@ -34,6 +34,8 @@ class KioskUiTest extends TestCase
             ->assertSee($institution->nama_instansi)
             ->assertSee('data-kiosk-root', false)
             ->assertSee('data-kiosk-fullscreen', false)
+            ->assertDontSee('data-kiosk-pagination', false)
+            ->assertDontSee('data-kiosk-page-next', false)
             ->assertDontSee('Pilih area layanan')
             ->assertDontSee('Konfirmasi pilihan');
     }

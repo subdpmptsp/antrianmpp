@@ -178,25 +178,6 @@
         window.addEventListener('offline', updateConnection, { signal })
         window.__queueKioskClock = window.setInterval(updateClock, 30000)
 
-        const cards = [...root.querySelectorAll('[data-kiosk-institution-card]')]
-        const pageCurrent = root.querySelector('[data-kiosk-page-current]')
-        const pageTotal = root.querySelector('[data-kiosk-page-total]')
-        const previous = root.querySelector('[data-kiosk-page-prev]')
-        const next = root.querySelector('[data-kiosk-page-next]')
-        const pageSize = 6
-        let page = 1
-        const totalPages = Math.max(1, Math.ceil(cards.length / pageSize))
-        const renderPage = () => {
-            cards.forEach((card, index) => card.classList.toggle('is-page-hidden', index < (page - 1) * pageSize || index >= page * pageSize))
-            if (pageCurrent) pageCurrent.textContent = String(page)
-            if (pageTotal) pageTotal.textContent = String(totalPages)
-            if (previous) previous.disabled = page === 1
-            if (next) next.disabled = page === totalPages
-        }
-        previous?.addEventListener('click', () => { if (page > 1) { page--; renderPage() } }, { signal })
-        next?.addEventListener('click', () => { if (page < totalPages) { page++; renderPage() } }, { signal })
-        renderPage()
-
         const resetIdleTimer = () => {
             if (root.dataset.step === '1' || processing) return
             window.clearTimeout(idleTimer)

@@ -98,17 +98,6 @@
                     @endforelse
                 </div>
 
-                @if ($instansis->count() > 6)
-                    <div class="queue-kiosk__pagination" data-kiosk-pagination>
-                        <button type="button" data-kiosk-page-prev aria-label="Halaman sebelumnya">
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-                        </button>
-                        <strong><span data-kiosk-page-current>1</span> / <span data-kiosk-page-total>{{ (int) ceil($instansis->count() / 6) }}</span></strong>
-                        <button type="button" data-kiosk-page-next aria-label="Halaman berikutnya">
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-                        </button>
-                    </div>
-                @endif
             @else
                 <div class="queue-kiosk__toolbar">
                     @if ($isLivewire)
