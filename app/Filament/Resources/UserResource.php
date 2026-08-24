@@ -91,6 +91,10 @@ class UserResource extends Resource
                     ->disabled(fn ($record) => ($record && $record instanceof User && $record->role === 'admin') ||
                         (Auth::user()->role === 'operator')
                     ),
+                Forms\Components\Toggle::make('is_active')
+                    ->label('Akun Aktif')
+                    ->default(true)
+                    ->helperText('Akun nonaktif tidak dihitung dalam kehadiran.'),
                 Forms\Components\Select::make('service_id')
                     ->label('Layanan')
                     ->options(Service::where('is_active', true)->pluck('name', 'id'))
@@ -119,6 +123,9 @@ class UserResource extends Resource
                     ->searchable(),
                 Tables\Columns\TextColumn::make('role')
                     ->label('Peran'),
+                Tables\Columns\IconColumn::make('is_active')
+                    ->label('Aktif')
+                    ->boolean(),
                 Tables\Columns\TextColumn::make('service.name')
                     ->label('Layanan')
                     ->formatStateUsing(fn (?string $state, User $record): string => $record->role === 'admin' ? 'Semua' : ($state ?? '-')),

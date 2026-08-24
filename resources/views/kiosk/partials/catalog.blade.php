@@ -6,6 +6,8 @@
     $selectedInstitution = $selectedInstansi
         ? $instansis->firstWhere('instansi_id', $selectedInstansi)
         : null;
+    $popularInstitutions = collect($popularInstansis ?? $instansis->take(6));
+    $otherInstitutions = collect($otherInstansis ?? $instansis->skip($popularInstitutions->count()));
 @endphp
 
 <div
@@ -65,38 +67,44 @@
                     <p>Sentuh salah satu pilihan di bawah ini.</p>
                 </div>
 
-                <div class="queue-kiosk__institution-grid" data-kiosk-institution-grid>
-                    @forelse ($instansis as $instansi)
-                        @php
-                            $logoUrl = $instansi->logo_path
-                                ? Storage::disk('public')->url($instansi->logo_path)
-                                : null;
-                        @endphp
-                        @if ($isLivewire)
-                            <button type="button" class="queue-kiosk__institution-card" data-kiosk-institution-card wire:click="selectInstansi({{ (int) $instansi->instansi_id }})">
-                        @else
-                            <a class="queue-kiosk__institution-card" data-kiosk-institution-card href="{{ route('public.queue-kiosk', ['instansi' => $instansi->instansi_id]) }}">
-                        @endif
-                                <span class="queue-kiosk__institution-logo {{ $logoUrl ? 'has-image' : '' }}">
-                                    @if ($logoUrl)
-                                        <img src="{{ $logoUrl }}" alt="Logo {{ $instansi->nama_instansi }}">
-                                    @else
-                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21h16M6 21V8l6-4 6 4v13M9 10h.01M12 10h.01M15 10h.01M9 14h.01M12 14h.01M15 14h.01M10 21v-3h4v3"/></svg>
-                                    @endif
+                @if ($instansis->isEmpty())
+                    <div class="queue-kiosk__empty">
+                        <h3>Instansi belum tersedia</h3>
+                        <p>Silakan hubungi petugas layanan.</p>
+                    </div>
+                @else
+                    <div class="queue-kiosk__institution-layout" data-kiosk-institution-grid>
+                        <section class="queue-kiosk__institution-section queue-kiosk__institution-section--popular" aria-labelledby="popular-institutions-title">
+                            <div class="queue-kiosk__section-heading">
+                                <span class="queue-kiosk__section-icon queue-kiosk__section-icon--popular">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c4.2 0 7-3 7-7.2 0-3.1-1.8-5.9-5.2-8.8.1 2.5-.8 4.1-2.1 5.1.1-3.7-2-6.8-5.1-9.1.2 4-1.6 6.5-2.1 8.6C3.5 14.6 6.1 22 12 22Z"/></svg>
                                 </span>
-                                <span class="queue-kiosk__institution-copy">
-                                    <strong>{{ $instansi->nama_instansi }}</strong>
-                                    <small>{{ $instansi->active_services_count }} layanan tersedia</small>
+                                <div><h3 id="popular-institutions-title">Layanan populer</h3><p>Paling sering dikunjungi bulan ini</p></div>
+                            </div>
+                            <div class="queue-kiosk__popular-list">
+                                @foreach ($popularInstitutions as $instansi)
+                                    @include('kiosk.partials.institution-card', ['instansi' => $instansi, 'variant' => 'popular', 'isLivewire' => $isLivewire])
+                                @endforeach
+                            </div>
+                        </section>
+
+                        <section class="queue-kiosk__institution-section queue-kiosk__institution-section--others" aria-labelledby="other-institutions-title">
+                            <div class="queue-kiosk__section-heading">
+                                <span class="queue-kiosk__section-icon">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V8l7-4 7 4v13M8 11h2m4 0h2m-8 4h2m4 0h2m-6 6v-3h4v3"/></svg>
                                 </span>
-                                <svg class="queue-kiosk__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-                        @if ($isLivewire)</button>@else</a>@endif
-                    @empty
-                        <div class="queue-kiosk__empty">
-                            <h3>Instansi belum tersedia</h3>
-                            <p>Silakan hubungi petugas layanan.</p>
-                        </div>
-                    @endforelse
-                </div>
+                                <div><h3 id="other-institutions-title">Instansi lainnya</h3><p>Diurutkan berdasarkan aktivitas layanan</p></div>
+                            </div>
+                            <div class="queue-kiosk__other-grid">
+                                @forelse ($otherInstitutions as $instansi)
+                                    @include('kiosk.partials.institution-card', ['instansi' => $instansi, 'variant' => 'compact', 'isLivewire' => $isLivewire])
+                                @empty
+                                    <div class="queue-kiosk__section-empty">Semua instansi tersedia pada layanan populer.</div>
+                                @endforelse
+                            </div>
+                        </section>
+                    </div>
+                @endif
 
             @else
                 <div class="queue-kiosk__toolbar">

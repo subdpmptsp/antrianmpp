@@ -8,6 +8,7 @@ use App\Models\Instansi;
 use App\Models\Queue;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\KioskCatalogService;
 use Database\Seeders\TestingSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -31,6 +32,8 @@ class KioskUiTest extends TestCase
         $this->get(route('public.queue-kiosk'))
             ->assertOk()
             ->assertSee('Instansi apa yang Anda tuju?')
+            ->assertSee('Layanan populer')
+            ->assertSee('Instansi lainnya')
             ->assertSee($institution->nama_instansi)
             ->assertSee('data-kiosk-root', false)
             ->assertSee('data-kiosk-fullscreen', false)
@@ -38,6 +41,27 @@ class KioskUiTest extends TestCase
             ->assertDontSee('data-kiosk-page-next', false)
             ->assertDontSee('Pilih area layanan')
             ->assertDontSee('Konfirmasi pilihan');
+    }
+
+    public function test_kiosk_popular_column_uses_current_month_queue_totals(): void
+    {
+        config()->set('kiosk.popular_institution_count', 1);
+        [$popularInstitution, $popularService] = $this->createInstitutionWithService('Instansi Paling Ramai', 'R');
+        [$otherInstitution] = $this->createInstitutionWithService('Instansi Lebih Sepi', 'S');
+
+        foreach (range(1, 12) as $number) {
+            Queue::query()->create([
+                'service_id' => $popularService->id,
+                'number' => 'R-'.str_pad((string) $number, 3, '0', STR_PAD_LEFT),
+                'status' => Queue::STATUS_FINISHED,
+            ]);
+        }
+
+        $catalog = app(KioskCatalogService::class);
+        $columns = $catalog->splitInstitutions($catalog->rankedInstitutions());
+
+        $this->assertSame($popularInstitution->instansi_id, $columns['popular']->first()->instansi_id);
+        $this->assertTrue($columns['others']->contains('instansi_id', $otherInstitution->instansi_id));
     }
 
     public function test_kiosk_guides_users_from_institution_to_direct_print_service_selection(): void
@@ -95,18 +119,20 @@ class KioskUiTest extends TestCase
         ]);
     }
 
-    private function createInstitutionWithService(): array
-    {
+    private function createInstitutionWithService(
+        string $institutionName = 'Dinas Pelayanan Terpadu',
+        string $prefix = 'U',
+    ): array {
         $zone = Counter::query()->findOrFail(20);
         $institution = Instansi::query()->create([
-            'nama_instansi' => 'Dinas Pelayanan Terpadu',
+            'nama_instansi' => $institutionName,
             'deskripsi' => 'Pelayanan administrasi',
             'counter_id' => $zone->id,
         ]);
         $service = Service::query()->create([
             'instansi_id' => $institution->instansi_id,
             'name' => 'Konsultasi Perizinan dan Penanaman Modal',
-            'prefix' => 'U',
+            'prefix' => $prefix,
             'padding' => 3,
             'is_active' => true,
         ]);

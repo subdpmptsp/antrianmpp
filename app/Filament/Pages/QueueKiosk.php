@@ -2,9 +2,9 @@
 
 namespace App\Filament\Pages;
 
-use App\Models\Instansi;
 use App\Models\Queue;
 use App\Models\Service;
+use App\Services\KioskCatalogService;
 use App\Services\QueueService;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Log;
@@ -28,6 +28,10 @@ class QueueKiosk extends Page
 
     public $services;
 
+    public $popularInstansis;
+
+    public $otherInstansis;
+
     public static function canAccess(): bool
     {
         return auth()->user()?->can('access-admin-area') ?? false;
@@ -38,16 +42,12 @@ class QueueKiosk extends Page
         return static::canAccess();
     }
 
-    public function mount(): void
+    public function mount(KioskCatalogService $catalog): void
     {
-        $this->instansis = Instansi::query()
-            ->whereNotNull('counter_id')
-            ->whereHas('services', fn ($query) => $query->where('is_active', true))
-            ->withCount([
-                'services as active_services_count' => fn ($query) => $query->where('is_active', true),
-            ])
-            ->orderBy('nama_instansi')
-            ->get();
+        $this->instansis = $catalog->rankedInstitutions();
+        $institutionColumns = $catalog->splitInstitutions($this->instansis);
+        $this->popularInstansis = $institutionColumns['popular'];
+        $this->otherInstansis = $institutionColumns['others'];
         $this->services = collect();
     }
 

@@ -25,9 +25,13 @@ class User extends Authenticatable implements FilamentUser
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
+    protected $attributes = [
+        'is_active' => true,
+    ];
+
     public function canAccessPanel(Panel $panel): bool
     {
-        return in_array($this->role, array_keys(self::ROLE_LABELS), true);
+        return $this->is_active && in_array($this->role, array_keys(self::ROLE_LABELS), true);
     }
 
     public function isAdmin(): bool
@@ -60,6 +64,7 @@ class User extends Authenticatable implements FilamentUser
         'email',
         'password',
         'role',
+        'is_active',
         'counter_id',
         'service_id',
         'password_changed_at',
@@ -86,6 +91,7 @@ class User extends Authenticatable implements FilamentUser
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'password_changed_at' => 'datetime',
+            'is_active' => 'boolean',
         ];
     }
 

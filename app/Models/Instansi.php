@@ -16,8 +16,15 @@ class Instansi extends Model
     public $incrementing = true;
 
     protected $keyType = 'int';
-    
-    protected $fillable = ['nama_instansi', 'deskripsi', 'logo_path', 'counter_id'];
+
+    protected $fillable = ['nama_instansi', 'work_days_per_week', 'deskripsi', 'logo_path', 'counter_id'];
+
+    protected function casts(): array
+    {
+        return [
+            'work_days_per_week' => 'integer',
+        ];
+    }
 
     public function counter()
     {

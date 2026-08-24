@@ -41,6 +41,15 @@ class DashboardKiosk extends Page
                         ->limit(1);
                 }
             ])
+            ->withCount([
+                'queues as today_queue_count' => function ($query) {
+                    $query->whereDate('created_at', now()->toDateString());
+                },
+                'queues as waiting_queue_count' => function ($query) {
+                    $query->where('status', 'waiting')
+                        ->whereDate('created_at', now()->toDateString());
+                },
+            ])
             ->orderBy('name')
             ->orderBy('id')
             ->get();

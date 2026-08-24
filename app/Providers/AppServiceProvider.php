@@ -9,6 +9,8 @@ use App\Services\QueueService;
 use App\Services\ThermalPrinterService;
 use Filament\Support\Assets\Js;
 use Filament\Support\Facades\FilamentAsset;
+use Filament\Support\Facades\FilamentView;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Auth\Events\Login as LaravelLogin;
 use Illuminate\Auth\Events\Logout as LaravelLogout;
 use Illuminate\Support\Facades\Event;
@@ -46,6 +48,13 @@ class AppServiceProvider extends ServiceProvider
             Js::make('thermal-printer', asset('js/thermal-printer.js')),
             Js::make('call-queue', asset('js/call-queue.js')),
         ]);
+
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            fn (): string => auth()->user()?->isOperator()
+                ? view('filament.partials.operator-session-guard')->render()
+                : '',
+        );
 
         // Register event listener for attendance - Laravel native Login event
         Event::listen(

@@ -4,6 +4,7 @@ namespace App\Listeners;
 
 use App\Models\Attendance;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class RecordAttendanceOnLogin
@@ -16,7 +17,7 @@ class RecordAttendanceOnLogin
         try {
             $user = $event->user ?? Auth::user();
 
-            if (!$user || $user->role === 'admin') {
+            if (! $user || $user->role === 'admin' || ! $user->is_active) {
                 return;
             }
 
@@ -31,6 +32,8 @@ class RecordAttendanceOnLogin
                     'status' => 'present',
                 ],
             );
+
+            Cache::forget('attendance:monthly-recap:'.now()->year);
         } catch (\Exception $e) {
             Log::error('Error in RecordAttendanceOnLogin', [
                 'error' => $e->getMessage(),

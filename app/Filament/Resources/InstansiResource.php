@@ -21,12 +21,12 @@ class InstansiResource extends Resource
     protected static ?string $navigationGroup = 'Master Data';
 
     protected static ?string $Label = 'Instansi';
-    
+
     public static function canAccess(): bool
     {
         return auth()->user()?->can('access-admin-area') ?? false;
     }
-    
+
     public static function canViewAny(): bool
     {
         return static::canAccess();
@@ -38,13 +38,17 @@ class InstansiResource extends Resource
             ->schema([
                 Forms\Components\FileUpload::make('logo_path')
                     ->label('Logo Instansi untuk Kiosk')
-                    ->helperText('Gunakan PNG, JPG, atau WebP. Maksimal 2 MB.')
+                    ->helperText('Gunakan PNG transparan. Maksimal 1 MB; otomatis diseragamkan ke kanvas 512×512 px.')
                     ->image()
-                    ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/webp'])
+                    ->acceptedFileTypes(['image/png'])
                     ->disk('public')
                     ->directory('instansi-logos')
                     ->visibility('public')
-                    ->maxSize(2048)
+                    ->maxSize(1024)
+                    ->imageResizeMode('contain')
+                    ->imageResizeTargetWidth('512')
+                    ->imageResizeTargetHeight('512')
+                    ->imageResizeUpscale(false)
                     ->imagePreviewHeight('140')
                     ->openable()
                     ->downloadable()
@@ -54,6 +58,15 @@ class InstansiResource extends Resource
                     ->label('Nama Instansi')
                     ->required()
                     ->maxLength(255),
+                Forms\Components\Select::make('work_days_per_week')
+                    ->label('Pola Hari Kerja')
+                    ->options([
+                        5 => '5 hari (Senin–Jumat)',
+                        6 => '6 hari (Senin–Sabtu)',
+                    ])
+                    ->default(5)
+                    ->required()
+                    ->helperText('Hari libur nasional tetap dikecualikan dari perhitungan.'),
                 Forms\Components\Select::make('counter_id')
                     ->label('Zona Internal')
                     ->relationship('counter', 'name')
@@ -83,6 +96,10 @@ class InstansiResource extends Resource
                     ->label('Zona Internal')
                     ->placeholder('Belum ditentukan')
                     ->sortable(),
+                Tables\Columns\TextColumn::make('work_days_per_week')
+                    ->label('Hari Kerja')
+                    ->formatStateUsing(fn (int $state): string => $state === 6 ? 'Senin–Sabtu' : 'Senin–Jumat')
+                    ->badge(),
             ])
             ->filters([
                 //

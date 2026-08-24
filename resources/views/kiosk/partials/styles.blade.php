@@ -51,22 +51,39 @@
     .queue-kiosk__intro h2 { margin: 6px 0 5px; font-size: clamp(27px, 3vw, 40px); line-height: 1.1; font-weight: 850; letter-spacing: -.02em; }
     .queue-kiosk__intro p { margin: 0; color: var(--kiosk-muted); font-size: 15px; }
 
-    .queue-kiosk__institution-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+    .queue-kiosk__institution-layout { display: grid; grid-template-columns: minmax(270px, 2fr) minmax(0, 3fr); gap: clamp(20px, 2.4vw, 34px); align-items: start; }
+    .queue-kiosk__institution-section { min-width: 0; }
+    .queue-kiosk__section-heading { min-height: 44px; display: flex; align-items: center; gap: 10px; margin-bottom: 11px; }
+    .queue-kiosk__section-heading h3 { margin: 0; color: #16283e; font-size: 16px; line-height: 1.2; font-weight: 850; }
+    .queue-kiosk__section-heading p { margin: 3px 0 0; color: var(--kiosk-muted); font-size: 10px; }
+    .queue-kiosk__section-icon { width: 32px; height: 32px; display: grid; place-items: center; flex: 0 0 auto; color: #42617e; border-radius: 10px; background: #edf3f8; }
+    .queue-kiosk__section-icon--popular { color: #a85408; background: #fff3df; }
+    .queue-kiosk__section-icon svg { width: 19px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    .queue-kiosk__popular-list { display: grid; grid-template-columns: 1fr; gap: 9px; }
+    .queue-kiosk__other-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+    .queue-kiosk__section-empty { grid-column: 1 / -1; min-height: 90px; display: grid; place-items: center; padding: 18px; color: var(--kiosk-muted); text-align: center; border: 1px dashed #cbd8e5; border-radius: 14px; background: #f8fbfe; font-size: 12px; }
     .queue-kiosk__institution-card, .queue-kiosk__service-card { min-height: 116px; gap: 14px; padding: 16px 18px; color: var(--kiosk-ink); text-align: left; text-decoration: none; border: 1px solid #d7e2ed; border-radius: 19px; background: #fff; box-shadow: 0 7px 18px rgba(31,61,94,.06); cursor: pointer; transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
-    .queue-kiosk__institution-card { min-width: 0; min-height: 88px; gap: 9px; padding: 10px; border-radius: 15px; }
+    .queue-kiosk__institution-card { min-width: 0; width: 100%; min-height: 68px; gap: 10px; padding: 9px 11px; border-radius: 13px; box-shadow: 0 4px 12px rgba(31,61,94,.045); }
+    .queue-kiosk__institution-card--popular { min-height: 72px; padding: 10px 13px; border: 2px solid #f1a332; background: linear-gradient(105deg, #fffdf9, #fff); box-shadow: 0 6px 16px rgba(190,105,16,.07); }
+    .queue-kiosk__institution-card--compact { min-height: 68px; border-color: #dde3e9; box-shadow: 0 3px 10px rgba(31,61,94,.035); }
     .queue-kiosk__institution-card:hover, .queue-kiosk__institution-card:focus-visible, .queue-kiosk__service-card:hover, .queue-kiosk__service-card:focus-visible { transform: translateY(-3px); border-color: #80afe0; box-shadow: 0 14px 28px rgba(20,83,143,.14); outline: none; }
     .queue-kiosk__institution-card:active, .queue-kiosk__service-card:active { transform: scale(.985); }
     .queue-kiosk__institution-logo, .queue-kiosk__service-icon { width: 58px; height: 58px; display: grid; place-items: center; flex: 0 0 auto; color: var(--kiosk-blue); border-radius: 16px; background: var(--kiosk-sky); overflow: hidden; }
-    .queue-kiosk__institution-logo { width: 44px; height: 44px; border-radius: 12px; }
-    .queue-kiosk__institution-logo.has-image { padding: 5px; background: #fff; border: 1px solid #e1e8f0; }
+    .queue-kiosk__institution-logo { width: 34px; height: 34px; border-radius: 10px; }
+    .queue-kiosk__institution-card--popular .queue-kiosk__institution-logo { width: 46px; height: 46px; border-radius: 12px; }
+    .queue-kiosk__institution-logo.has-image { padding: 3px; background: transparent; border: 0; }
+    .queue-kiosk__institution-logo.is-fallback { color: #65778a; background: #eef2f6; }
     .queue-kiosk__institution-logo img { width: 100%; height: 100%; object-fit: contain; }
-    .queue-kiosk__institution-logo svg, .queue-kiosk__service-icon svg, .queue-kiosk__printer-icon svg { width: 30px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .queue-kiosk__institution-logo svg, .queue-kiosk__service-icon svg, .queue-kiosk__printer-icon svg { width: 23px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .queue-kiosk__institution-card--popular .queue-kiosk__institution-logo svg { width: 28px; }
     .queue-kiosk__institution-copy, .queue-kiosk__service-copy { min-width: 0; flex: 1; }
     .queue-kiosk__institution-copy strong, .queue-kiosk__institution-copy small, .queue-kiosk__service-copy strong, .queue-kiosk__service-copy small { display: block; }
     .queue-kiosk__institution-copy strong, .queue-kiosk__service-copy strong { font-size: 15px; line-height: 1.32; font-weight: 800; }
     .queue-kiosk__institution-copy small, .queue-kiosk__service-copy small { margin-top: 5px; color: var(--kiosk-muted); font-size: 11px; }
-    .queue-kiosk__institution-copy strong { display: -webkit-box; overflow: hidden; font-size: 12px; line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-    .queue-kiosk__institution-copy small { overflow: hidden; margin-top: 3px; font-size: 9px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+    .queue-kiosk__institution-copy strong { display: -webkit-box; overflow: hidden; font-size: 12.5px; line-height: 1.22; font-weight: 750; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .queue-kiosk__institution-card--popular .queue-kiosk__institution-copy strong { font-size: 14px; font-weight: 850; }
+    .queue-kiosk__institution-copy small { overflow: hidden; margin-top: 3px; font-size: 10px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+    .queue-kiosk__institution-card--popular .queue-kiosk__institution-copy small { font-size: 11px; }
     .queue-kiosk__institution-card .queue-kiosk__arrow { display: none; }
     .queue-kiosk__arrow { flex: 0 0 auto; color: #8194a8; }
 
@@ -78,9 +95,9 @@
     .queue-kiosk__selected-institution small { color: var(--kiosk-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
     .queue-kiosk__selected-institution strong { font-size: 14px; line-height: 1.25; }
 
-    .queue-kiosk__service-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+    .queue-kiosk__service-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; align-content: start; }
     .queue-kiosk__service-form { display: none; }
-    .queue-kiosk__service-card { min-height: 112px; }
+    .queue-kiosk__service-card { min-height: 88px; padding: 12px 14px; }
     .queue-kiosk__service-card:disabled { opacity: .55; pointer-events: none; }
     .queue-kiosk__empty { grid-column: 1 / -1; padding: 42px 20px; text-align: center; border: 2px dashed #cbd8e5; border-radius: 20px; background: #f8fbfe; }
     .queue-kiosk__empty h3 { margin: 0; font-size: 21px; }
@@ -109,37 +126,43 @@
     @keyframes kiosk-printer-pulse { to { transform: translateY(-5px); } }
 
     @media (max-height: 800px) and (min-width: 900px) {
-        .queue-kiosk__header { min-height: 84px; padding-top: 10px; padding-bottom: 10px; }
-        .queue-kiosk__logo--city { width: 56px; height: 56px; }
-        .queue-kiosk__logo--office { width: 62px; height: 62px; border-radius: 15px; }
-        .queue-kiosk__brand-copy h1 { font-size: 26px; }
+        .queue-kiosk__header { min-height: 76px; padding-top: 8px; padding-bottom: 8px; }
+        .queue-kiosk__logo--city { width: 50px; height: 50px; }
+        .queue-kiosk__logo--office { width: 56px; height: 56px; border-radius: 14px; }
+        .queue-kiosk__brand-copy h1 { font-size: 24px; }
         .queue-kiosk__brand-copy p { font-size: 12px; }
         .queue-kiosk__clock strong { font-size: 24px; }
-        .queue-kiosk__fullscreen { width: 45px; height: 45px; }
-        .queue-kiosk__main { padding-top: 13px; padding-bottom: 15px; }
-        .queue-kiosk__steps { margin-bottom: 12px; }
-        .queue-kiosk__step { min-height: 42px; }
-        .queue-kiosk__step-number { width: 28px; height: 28px; }
-        .queue-kiosk__content { min-height: 0; padding: 19px 25px; border-radius: 22px; }
-        .queue-kiosk__intro { margin-bottom: 15px; }
-        .queue-kiosk__intro h2 { font-size: 29px; }
-        .queue-kiosk__institution-grid { gap: 8px; }
-        .queue-kiosk__institution-card { height: 78px; min-height: 78px; padding: 8px; }
-        .queue-kiosk__service-card { min-height: 96px; }
-        .queue-kiosk__institution-logo { width: 40px; height: 40px; }
+        .queue-kiosk__fullscreen { width: 42px; height: 42px; }
+        .queue-kiosk__main { padding-top: 8px; padding-bottom: 8px; }
+        .queue-kiosk__steps { margin-bottom: 8px; padding: 6px; }
+        .queue-kiosk__step { min-height: 38px; }
+        .queue-kiosk__step-number { width: 26px; height: 26px; }
+        .queue-kiosk__content { min-height: 0; padding: 13px 20px; border-radius: 20px; }
+        .queue-kiosk__intro { margin-bottom: 10px; }
+        .queue-kiosk__intro h2 { margin-top: 4px; font-size: 26px; }
+        .queue-kiosk__intro p { font-size: 13px; }
+        .queue-kiosk__institution-layout { gap: 18px; }
+        .queue-kiosk__section-heading { min-height: 30px; margin-bottom: 6px; }
+        .queue-kiosk__section-icon { width: 28px; height: 28px; }
+        .queue-kiosk__section-heading p { display: none; }
+        .queue-kiosk__popular-list, .queue-kiosk__other-grid { gap: 6px; }
+        .queue-kiosk__institution-card, .queue-kiosk__institution-card--popular, .queue-kiosk__institution-card--compact { height: 52px; min-height: 52px; padding: 5px 8px; }
+        .queue-kiosk__service-grid { gap: 8px; }
+        .queue-kiosk__service-card { min-height: 76px; padding: 10px 12px; }
+        .queue-kiosk__institution-logo, .queue-kiosk__institution-card--popular .queue-kiosk__institution-logo { width: 34px; height: 34px; }
+        .queue-kiosk__institution-card--compact .queue-kiosk__institution-logo { width: 28px; height: 28px; }
+        .queue-kiosk__institution-card--popular .queue-kiosk__institution-copy strong { font-size: 12px; }
+        .queue-kiosk__institution-copy small, .queue-kiosk__institution-card--popular .queue-kiosk__institution-copy small { margin-top: 1px; font-size: 9px; }
         .queue-kiosk__service-icon { width: 50px; height: 50px; }
-        .queue-kiosk__footer { min-height: 42px; }
+        .queue-kiosk__footer { min-height: 38px; }
     }
 
-    @media (max-width: 1150px) {
-        .queue-kiosk__institution-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    @media (max-width: 1000px) {
+        .queue-kiosk__institution-layout { grid-template-columns: minmax(240px, 2fr) minmax(0, 3fr); gap: 16px; }
+        .queue-kiosk__other-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
-    @media (max-width: 900px) {
-        .queue-kiosk__institution-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    }
-
-    @media (max-width: 680px) {
+    @media (max-width: 760px) {
         .queue-kiosk__header { min-height: 84px; padding: 13px 16px; }
         .queue-kiosk__brand { gap: 10px; }
         .queue-kiosk__logo--city { width: 46px; height: 46px; }
@@ -153,14 +176,22 @@
         .queue-kiosk__step { min-height: 44px; gap: 6px; }
         .queue-kiosk__step small { display: none; }
         .queue-kiosk__content { padding: 20px 14px; border-radius: 20px; }
-        .queue-kiosk__institution-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .queue-kiosk__service-grid { grid-template-columns: 1fr; }
-        .queue-kiosk__institution-card, .queue-kiosk__service-card { min-height: 96px; }
+        .queue-kiosk__institution-layout { grid-template-columns: 1fr; }
+        .queue-kiosk__popular-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .queue-kiosk__other-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .queue-kiosk__service-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+        .queue-kiosk__institution-card { min-height: 68px; }
+        .queue-kiosk__service-card { min-height: 72px; padding: 10px 12px; }
         .queue-kiosk__toolbar { align-items: flex-start; }
         .queue-kiosk__selected-institution { max-width: 55%; }
         .queue-kiosk__selected-institution img { display: none; }
         .queue-kiosk__footer { min-height: 58px; justify-content: center; }
         .queue-kiosk__footer > span:first-child { display: none; }
+    }
+
+    @media (max-width: 460px) {
+        .queue-kiosk__popular-list, .queue-kiosk__other-grid { grid-template-columns: 1fr; }
+        .queue-kiosk__service-grid { grid-template-columns: 1fr; }
     }
 
     @media (prefers-reduced-motion: reduce) {

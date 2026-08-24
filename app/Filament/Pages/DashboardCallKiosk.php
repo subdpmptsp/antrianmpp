@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Counter;
 use App\Models\Queue;
 use App\Models\Service;
+use App\Services\AudioConfigurationService;
 use App\Services\QueueService;
 use Filament\Pages\Page;
 use Illuminate\Contracts\View\View; // Penting untuk method render
@@ -419,7 +420,12 @@ class DashboardCallKiosk extends Page
             'queueNumber' => $queue->number,
         ]);
 
-        $queueService->serveQueue($queue);
+        if ($queueService->serveQueue($queue)) {
+            $this->dispatch('service-started', [
+                'queueId' => $queue->id,
+                'startedAt' => now()->timestamp,
+            ]);
+        }
     }
 
     public function markAsFinished(QueueService $queueService, Queue $queue)
@@ -481,6 +487,7 @@ class DashboardCallKiosk extends Page
         $stats = [
             'total' => 0, 'finished' => 0, 'waiting' => 0, 'cancelled' => 0,
         ];
+        $audioConfig = app(AudioConfigurationService::class)->get();
 
         // Hanya ambil data jika ada loket yang dipilih
         if ($this->selectedCounter) {
@@ -544,6 +551,7 @@ class DashboardCallKiosk extends Page
             'currentQueue' => $currentQueue,
             'waitingQueues' => $waitingQueues,
             'stats' => $stats,
+            'announcementOpeningAudioUrl' => $audioConfig['url'] ?? asset(config('audio.fallback.url', 'sounds/opening.mp3')),
         ];
     }
 }

@@ -151,8 +151,8 @@
                             <div class="p-8" wire:key="current-{{ $currentQueue->id }}">
                                 <div class="text-center mb-8">
                                     <div class="relative inline-block">
-                                        <div class="number-display w-48 h-48 rounded-3xl flex items-center justify-center shadow-2xl">
-                                            <span class="text-6xl font-bold text-white">{{ $currentQueue->number }}</span>
+                                        <div class="number-display inline-flex min-w-[12rem] max-w-[92%] px-10 py-8 rounded-3xl items-center justify-center shadow-2xl">
+                                            <span class="text-6xl font-bold text-white whitespace-nowrap leading-none tracking-wide">{{ $currentQueue->number }}</span>
                                         </div>
                                         <div class="absolute -top-4 -right-4 w-12 h-12 bg-{{ $currentQueue->status == 'called' ? 'yellow' : ($currentQueue->status == 'serving' ? 'green' : 'gray') }}-500 rounded-full flex items-center justify-center shadow-lg">
                                             @if($currentQueue->status == 'called')
@@ -174,6 +174,17 @@
                                         <p class="text-sm text-gray-500 dark:text-gray-400">Layanan</p>
                                         <p class="text-lg font-semibold text-gray-900 dark:text-white">{{ $currentQueue->service?->name ?? 'Tidak ada layanan' }}</p>
                                     </div>
+
+                                    @if ($currentQueue->status == 'serving')
+                                        <div class="mt-5 inline-flex items-center space-x-2 rounded-full bg-green-50 px-4 py-2 text-green-700 border border-green-200">
+                                            <span class="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span>
+                                            <span class="text-sm font-semibold">Durasi layanan</span>
+                                            <span id="serviceTimer" class="text-sm font-bold tabular-nums"
+                                                data-started-at="{{ $currentQueue->served_at?->timestamp ?? '' }}">
+                                                00:00:00
+                                            </span>
+                                        </div>
+                                    @endif
                                 </div>
                                 
                                 <!-- Action Buttons -->
@@ -400,6 +411,39 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Rekapitulasi Pemohon -->
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 card-hover">
+                        <div class="flex items-start justify-between mb-4">
+                            <div>
+                                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Rekapitulasi Pemohon</h3>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                    Rekapitulasi pemohon di layanan "{{ $selectedCounter->service?->name ?? 'Layanan ini' }}" hari ini
+                                </p>
+                            </div>
+                            <div class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                                History
+                            </div>
+                        </div>
+
+                        <div class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-700/40 p-6 min-h-48">
+                            <div class="flex h-full min-h-36 items-center justify-center">
+                                <div class="text-center">
+                                    <div class="w-16 h-16 mx-auto rounded-full bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center mb-3">
+                                        <svg class="w-8 h-8 text-gray-300 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                        </svg>
+                                    </div>
+                                    <p class="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                        Belum ada data rekap untuk ditampilkan
+                                    </p>
+                                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                        Area ini disiapkan sebagai history pemohon layanan hari ini
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         @else
@@ -461,494 +505,211 @@
     </div>
 
     <script>
-        // ResponsiveVoice configuration
-        const RESPONSIVEVOICE_CONFIG = {
-            voice: 'Indonesian Female',
-            rate: 0.8,
-            pitch: 1,
-            volume: 1
-        };
-        
-        // Enable audio on first user interaction
-        let audioEnabled = false;
-        const enableAudio = () => {
-            if (!audioEnabled) {
-                console.log('Enabling audio on user interaction...');
-                audioEnabled = true;
-                
-                // Hide audio notice
-                const audioNotice = document.getElementById('audioNotice');
-                if (audioNotice) {
-                    audioNotice.style.display = 'none';
-                }
-                
-                // Don't play test audio here, just enable
-                console.log('Audio enabled successfully');
+        (() => {
+            const AUDIO_CONFIG = {
+                voice: 'Indonesian Female',
+                rate: 0.8,
+                pitch: 1,
+                volume: 1,
+                fallbackAudio: @js($announcementOpeningAudioUrl ?? asset('sounds/opening.mp3')),
             }
-        };
-        
-        // Expose enableAudio to global scope
-        window.enableAudio = () => {
-            console.log('enableAudio called from button click');
-            enableAudio();
-        };
-        
-        
-        document.addEventListener('livewire:initialized', () => {
-            console.log('Livewire initialized, setting up event listeners...');
-            const audio = document.getElementById('announcementAudio');
-            const tvNotification = document.getElementById('tvNotification');
-            
-            console.log('Audio element:', audio);
-            console.log('TV notification element:', tvNotification);
-            
-            // Enable audio context on first user interaction
-            let audioEnabled = false;
+
+            let audioEnabled = false
+            let tvHideTimer = null
+            let cleanupAnnouncementListener = null
+            let serviceTimerTicker = null
+            let serviceTimerStartedAt = null
+
+            const hideAudioNotice = () => {
+                const audioNotice = document.getElementById('audioNotice')
+                if (audioNotice) audioNotice.style.display = 'none'
+            }
+
             const enableAudio = () => {
-                if (!audioEnabled) {
-                    console.log('Enabling audio on user interaction...');
-                    audioEnabled = true;
-                    
-                    // Hide audio notice
-                    const audioNotice = document.getElementById('audioNotice');
-                    if (audioNotice) {
-                        audioNotice.style.display = 'none';
-                    }
-                    
-                    // Audio enabled silently without test sound
-                }
-            };
-            
-            // Add click listeners to enable audio
-            document.addEventListener('click', enableAudio, { once: true });
-            document.addEventListener('keydown', enableAudio, { once: true });
-            
-            // Event listener untuk pemanggilan antrian
-            Livewire.on('announce-queue', (data) => {
-                console.log('=== ANNOUNCE QUEUE EVENT RECEIVED ===');
-                console.log('Data received:', data);
-                
-                // Extract data dari object
-                let announcementData;
-                if (Array.isArray(data) && data.length > 0) {
-                    announcementData = data[0];
-                } else if (typeof data === 'object' && data !== null) {
-                    announcementData = data;
-                } else {
-                    console.error('Invalid data format received:', data);
-                    return;
-                }
-                
-                console.log('Announcement data:', announcementData);
-                
-                // Update tampilan TV
-                const queueNumberEl = document.getElementById('announcedQueueNumber');
-                const serviceEl = document.getElementById('announcedService');
-                const counterEl = document.getElementById('announcedCounter');
-                const timeEl = document.getElementById('announcedTime');
-                
-                if (queueNumberEl) queueNumberEl.textContent = announcementData.queueNumber;
-                if (serviceEl) serviceEl.textContent = announcementData.serviceName;
-                if (counterEl) counterEl.textContent = `${announcementData.counterName} - ${announcementData.zona}`;
-                if (timeEl) timeEl.textContent = `Dipanggil pada: ${announcementData.calledAt}`;
-                
-                // Tampilkan notifikasi TV
-                if (tvNotification) {
-                    tvNotification.classList.remove('hidden');
-                }
-                
-                // SELALU putar suara pemanggilan - ini akan diputar di browser petugas loket
-                // Tidak peduli apakah audio sudah di-enable sebelumnya atau belum
-                playAnnouncementSound(announcementData);
-                
-                // Sembunyikan notifikasi setelah 10 detik (lebih lama untuk memastikan audio selesai)
-                setTimeout(() => {
-                    if (tvNotification) {
-                        tvNotification.classList.add('hidden');
-                    }
-                }, 10000);
-            });
-            
-            function playAnnouncementSound(data) {
-                console.log('=== PLAYING ANNOUNCEMENT SOUND ===');
-                console.log('Data:', data);
-                
-                // Langsung gunakan ResponsiveVoice untuk audio announcement
-                playResponsiveVoiceAnnouncement(data);
+                if (audioEnabled) return
+                audioEnabled = true
+                hideAudioNotice()
             }
-            
-            function playResponsiveVoiceAnnouncement(data) {
-                console.log('=== PLAYING RESPONSIVEVOICE ANNOUNCEMENT ===');
-                console.log('Data:', data);
-                
-                // SELALU enable audio ketika ada panggilan, tidak peduli status sebelumnya
-                if (!audioEnabled) {
-                    console.log('Audio not enabled yet, enabling now...');
-                    audioEnabled = true;
-                    
-                    // Hide audio notice
-                    const audioNotice = document.getElementById('audioNotice');
-                    if (audioNotice) {
-                        audioNotice.style.display = 'none';
-                    }
+
+            const normalizeAnnouncement = (data) => {
+                const queueNumber = String(data?.queueNumber || 'Tidak diketahui').replace(/-/g, ' ')
+                const serviceName = String(data?.serviceName || 'Layanan').toLowerCase()
+                const servicePrefix = String(data?.servicePrefix || 'A')
+                const zone = String(data?.zona || 'Zona')
+                const zoneText = zone.toUpperCase() === 'UPTSP' ? 'U-P-T-S-P' : zone.toLowerCase()
+                const finalServiceName = serviceName.includes('layanan') ? serviceName : `layanan ${serviceName}`
+
+                return {
+                    queueNumber,
+                    serviceName,
+                    servicePrefix,
+                    zone,
+                    zoneText,
+                    text: `nomor antrian ${queueNumber} menuju ke loket ${servicePrefix}, ${finalServiceName} ${zoneText}`,
                 }
-                
-                // Ganti tanda minus dengan spasi agar tidak terbaca oleh audio
-                const queueNumber = (data.queueNumber || 'Tidak diketahui').replace(/-/g, ' ');
-                const serviceName = (data.serviceName || 'Layanan').toLowerCase();
-                const servicePrefix = data.servicePrefix || 'A';
-                const zona = data.zona || 'Zona'; // Sekarang menggunakan counter.name
-                
-                // Format zona - UPTSP dieja, yang lain tidak
-                let zonaText = zona.toLowerCase();
-                if (zona.toUpperCase() === 'UPTSP') {
-                    zonaText = 'U-P-T-S-P';
-                }
-                
-                // Cek apakah serviceName sudah mengandung kata "layanan"
-                let finalServiceName = serviceName;
-                if (!serviceName.includes('layanan')) {
-                    finalServiceName = `layanan ${serviceName}`;
-                }
-                
-                // Format audio announcement sesuai dengan yang diminta
-                const announcementText = `nomor antrian ${queueNumber} menuju ke loket ${servicePrefix}, ${finalServiceName} ${zonaText}`;
-                
-                console.log('Announcement text:', announcementText);
-                
-                // SELALU coba putar audio, tidak peduli status audioEnabled
-                // Ini memastikan suara selalu diputar di browser petugas loket
-                tryAudioSolutions(announcementText, data);
             }
-            
-            function tryAudioSolutions(announcementText, data) {
-                console.log('=== TRYING AUDIO SOLUTIONS ===');
-                console.log('Announcement text:', announcementText);
-                console.log('ResponsiveVoice available:', typeof responsiveVoice !== 'undefined');
-                console.log('Speech Synthesis available:', 'speechSynthesis' in window);
-                
-                // Solution 1: Try ResponsiveVoice (PRIORITAS UTAMA)
-                if (typeof responsiveVoice !== 'undefined') {
-                    console.log('Trying ResponsiveVoice...');
-                    console.log('Voice:', RESPONSIVEVOICE_CONFIG.voice);
-                    console.log('Rate:', RESPONSIVEVOICE_CONFIG.rate);
-                    console.log('Pitch:', RESPONSIVEVOICE_CONFIG.pitch);
-                    console.log('Volume:', RESPONSIVEVOICE_CONFIG.volume);
-                    
-                    try {
-                        // Stop any ongoing speech first
-                        responsiveVoice.cancel();
-                        
-                        // Wait a bit before speaking to ensure clean start
-                        setTimeout(() => {
-                            responsiveVoice.speak(announcementText, RESPONSIVEVOICE_CONFIG.voice, {
-                                rate: RESPONSIVEVOICE_CONFIG.rate,
-                                pitch: RESPONSIVEVOICE_CONFIG.pitch,
-                                volume: RESPONSIVEVOICE_CONFIG.volume,
-                                onstart: function() {
-                                    console.log('✅ ResponsiveVoice started successfully');
-                                },
-                                onend: function() {
-                                    console.log('✅ ResponsiveVoice completed successfully');
-                                },
-                                onerror: function(error) {
-                                    console.error('❌ ResponsiveVoice failed:', error);
-                                    // Try next solution
-                                    trySpeechSynthesis(announcementText);
-                                }
-                            });
-                        }, 100);
-                        return; // Success, exit
-                    } catch (error) {
-                        console.error('❌ ResponsiveVoice error:', error);
-                        // Continue to next solution
-                    }
-                } else {
-                    console.log('❌ ResponsiveVoice not available');
-                }
-                
-                // Solution 2: Try Speech Synthesis (FALLBACK)
-                trySpeechSynthesis(announcementText);
+
+            const updateTvAnnouncement = (data) => {
+                const queueNumberEl = document.getElementById('announcedQueueNumber')
+                const serviceEl = document.getElementById('announcedService')
+                const counterEl = document.getElementById('announcedCounter')
+                const timeEl = document.getElementById('announcedTime')
+                const tvNotification = document.getElementById('tvNotification')
+
+                if (queueNumberEl) queueNumberEl.textContent = data.queueNumber || '-'
+                if (serviceEl) serviceEl.textContent = data.serviceName || '-'
+                if (counterEl) counterEl.textContent = `${data.counterName || '-'} - ${data.zona || '-'}`
+                if (timeEl) timeEl.textContent = `Dipanggil pada: ${data.calledAt || '-'}`
+                tvNotification?.classList.remove('hidden')
+
+                window.clearTimeout(tvHideTimer)
+                tvHideTimer = window.setTimeout(() => {
+                    tvNotification?.classList.add('hidden')
+                }, 10000)
             }
-            
-            function trySpeechSynthesis(announcementText) {
-                console.log('Trying Speech Synthesis...');
-                console.log('Announcement text:', announcementText);
-                
-                if ('speechSynthesis' in window) {
-                    try {
-                        // Cancel any ongoing speech first
-                        speechSynthesis.cancel();
-                        
-                        // Wait a bit before speaking to ensure clean start
-                        setTimeout(() => {
-                            const utterance = new SpeechSynthesisUtterance(announcementText);
-                            utterance.lang = 'id-ID';
-                            utterance.rate = 0.8;
-                            utterance.pitch = 1;
-                            utterance.volume = 1;
-                            
-                            console.log('Speech Synthesis settings:');
-                            console.log('  Language:', utterance.lang);
-                            console.log('  Rate:', utterance.rate);
-                            console.log('  Pitch:', utterance.pitch);
-                            console.log('  Volume:', utterance.volume);
-                            
-                            utterance.onstart = function() {
-                                console.log('✅ Speech Synthesis started successfully');
-                            };
-                            
-                            utterance.onend = function() {
-                                console.log('✅ Speech Synthesis completed successfully');
-                            };
-                            
-                            utterance.onerror = function(error) {
-                                console.error('❌ Speech Synthesis failed:', error);
-                                // Try next solution
-                                tryAudioFile();
-                            };
-                            
-                            speechSynthesis.speak(utterance);
-                        }, 100);
-                        return; // Success, exit
-                    } catch (error) {
-                        console.error('❌ Speech Synthesis error:', error);
-                    }
-                } else {
-                    console.log('❌ Speech Synthesis not available');
-                }
-                
-                // Solution 3: Try Audio File
-                tryAudioFile();
-            }
-            
-            function tryAudioFile() {
-                console.log('Trying Audio File...');
-                
+
+            const speakWithResponsiveVoice = (text) => new Promise((resolve, reject) => {
+                if (typeof responsiveVoice === 'undefined') return reject(new Error('ResponsiveVoice unavailable'))
+
                 try {
-                    const audio = new Audio('/sounds/opening.mp3');
-                    audio.volume = 0.8;
-                    
-                    audio.oncanplaythrough = function() {
-                        console.log('✅ Audio file can play');
-                        audio.play().then(function() {
-                            console.log('✅ Audio file playing successfully');
-                        }).catch(function(error) {
-                            console.error('❌ Audio file play failed:', error);
-                            // Try next solution
-                            tryBeepSound();
-                        });
-                    };
-                    
-                    audio.onerror = function(error) {
-                        console.error('❌ Audio file error:', error);
-                        // Try next solution
-                        tryBeepSound();
-                    };
-                    
-                    audio.load();
+                    responsiveVoice.cancel()
+                    window.setTimeout(() => {
+                        responsiveVoice.speak(text, AUDIO_CONFIG.voice, {
+                            rate: AUDIO_CONFIG.rate,
+                            pitch: AUDIO_CONFIG.pitch,
+                            volume: AUDIO_CONFIG.volume,
+                            onend: resolve,
+                            onerror: reject,
+                        })
+                    }, 100)
                 } catch (error) {
-                    console.error('❌ Audio file error:', error);
-                    // Try next solution
-                    tryBeepSound();
+                    reject(error)
                 }
-            }
-            
-            function tryBeepSound() {
-                console.log('Trying Beep Sound...');
-                
+            })
+
+            const speakWithBrowserVoice = (text) => new Promise((resolve, reject) => {
+                if (!('speechSynthesis' in window)) return reject(new Error('Speech synthesis unavailable'))
+
                 try {
-                    // Create a simple beep sound using Web Audio API
-                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    const oscillator = audioContext.createOscillator();
-                    const gainNode = audioContext.createGain();
-                    
-                    oscillator.connect(gainNode);
-                    gainNode.connect(audioContext.destination);
-                    
-                    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-                    oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
-                    oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.2);
-                    
-                    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-                    
-                    oscillator.start(audioContext.currentTime);
-                    oscillator.stop(audioContext.currentTime + 0.5);
-                    
-                    console.log('✅ Beep sound played successfully');
+                    speechSynthesis.cancel()
+                    window.setTimeout(() => {
+                        const utterance = new SpeechSynthesisUtterance(text)
+                        utterance.lang = 'id-ID'
+                        utterance.rate = AUDIO_CONFIG.rate
+                        utterance.pitch = AUDIO_CONFIG.pitch
+                        utterance.volume = AUDIO_CONFIG.volume
+
+                        const voices = speechSynthesis.getVoices()
+                        const indonesianVoice = voices.find((voice) => voice.lang?.toLowerCase().startsWith('id'))
+                        if (indonesianVoice) utterance.voice = indonesianVoice
+
+                        utterance.onend = resolve
+                        utterance.onerror = reject
+                        speechSynthesis.speak(utterance)
+                    }, 100)
                 } catch (error) {
-                    console.error('❌ Beep sound failed:', error);
-                    console.log('❌ All audio solutions failed');
+                    reject(error)
+                }
+            })
+
+            const playFallbackAudio = () => new Promise((resolve, reject) => {
+                const audio = new Audio(AUDIO_CONFIG.fallbackAudio)
+                audio.volume = AUDIO_CONFIG.volume
+                audio.onended = resolve
+                audio.onerror = reject
+                audio.play().catch(reject)
+            })
+
+            const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+            const playOpeningAudio = async () => {
+                try {
+                    await playFallbackAudio()
+                } catch (error) {
+                    console.error('Opening audio failed', error)
                 }
             }
-            
-            function fetchAudioFromAPI(data) {
-                console.log('=== FETCHING AUDIO FROM API ===');
-                
-                const params = new URLSearchParams({
-                    queue_id: data.queueId || ''
-                });
-                
-                fetch(`/api/audio/announcement?${params}`)
-                    .then(response => response.json())
-                    .then(result => {
-                        console.log('API Response:', result);
-                        
-                        if (result.success && result.audioUrl) {
-                            console.log('Using audio from API:', result.audioUrl);
-                            playAudioFromUrl(result.audioUrl);
-                        } else {
-                            console.log('API failed, falling back to speech synthesis');
-                            speakAnnouncement(data);
+
+            const playAnnouncementSound = async (data) => {
+                enableAudio()
+                const announcement = normalizeAnnouncement(data)
+
+                await playOpeningAudio()
+                await wait(800)
+
+                try {
+                    await speakWithResponsiveVoice(announcement.text)
+                    return
+                } catch (_) {}
+
+                try {
+                    await speakWithBrowserVoice(announcement.text)
+                    return
+                } catch (_) {}
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                document.addEventListener('click', enableAudio, { once: true })
+                document.addEventListener('keydown', enableAudio, { once: true })
+            })
+
+            document.addEventListener('livewire:initialized', () => {
+                const formatDuration = (totalSeconds) => {
+                    const safeSeconds = Math.max(0, Math.floor(totalSeconds))
+                    const hours = String(Math.floor(safeSeconds / 3600)).padStart(2, '0')
+                    const minutes = String(Math.floor((safeSeconds % 3600) / 60)).padStart(2, '0')
+                    const seconds = String(safeSeconds % 60).padStart(2, '0')
+                    return `${hours}:${minutes}:${seconds}`
+                }
+
+                const updateServiceTimer = () => {
+                    const timerEl = document.getElementById('serviceTimer')
+                    if (!timerEl) return
+
+                    const startedAtSeconds = serviceTimerStartedAt ?? (timerEl.dataset.startedAt ? Number(timerEl.dataset.startedAt) : null)
+                    if (!startedAtSeconds || Number.isNaN(startedAtSeconds)) {
+                        timerEl.textContent = '00:00:00'
+                        return
+                    }
+
+                    const diffMs = Date.now() - (startedAtSeconds * 1000)
+                    timerEl.textContent = formatDuration(diffMs / 1000)
+                }
+
+                const registerListener = () => {
+                    cleanupAnnouncementListener?.()
+                    cleanupAnnouncementListener = null
+
+                    cleanupAnnouncementListener = Livewire.on('announce-queue', async (data) => {
+                        const announcementData = Array.isArray(data) ? data[0] : data
+                        if (!announcementData || typeof announcementData !== 'object') return
+
+                        updateTvAnnouncement(announcementData)
+                        await playAnnouncementSound(announcementData)
+                    })
+                }
+
+                const registerServiceStartedListener = () => {
+                    window.addEventListener('service-started', (event) => {
+                        const startedAt = Number(event?.detail?.[0]?.startedAt ?? event?.detail?.startedAt ?? Math.floor(Date.now() / 1000))
+                        if (!Number.isNaN(startedAt) && startedAt > 0) {
+                            serviceTimerStartedAt = startedAt
+                            updateServiceTimer()
                         }
                     })
-                    .catch(error => {
-                        console.error('API Error:', error);
-                        console.log('API failed, falling back to speech synthesis');
-                        speakAnnouncement(data);
-                    });
-            }
-            
-            function playAudioFromUrl(audioUrl) {
-                console.log('=== PLAYING AUDIO FROM URL ===');
-                console.log('Audio URL:', audioUrl);
-                
-                // Check if it's ResponsiveVoice
-                if (audioUrl.startsWith('responsivevoice://')) {
-                    console.log('Using ResponsiveVoice');
-                    playResponsiveVoice(audioUrl);
-                    return;
                 }
-                
-                // Buat audio element baru untuk setiap pemanggilan
-                const audioElement = new Audio(audioUrl);
-                
-                audioElement.oncanplaythrough = () => {
-                    console.log('Audio ready to play');
-                    audioElement.play().catch(error => {
-                        console.error('Audio play error:', error);
-                        // Fallback ke speech synthesis jika audio gagal
-                        speakAnnouncement(data);
-                    });
-                };
-                
-                audioElement.onplay = () => {
-                    console.log('Audio started playing');
-                };
-                
-                audioElement.onended = () => {
-                    console.log('Audio finished playing');
-                };
-                
-                audioElement.onerror = (error) => {
-                    console.error('Audio error:', error);
-                    // Fallback ke speech synthesis jika audio gagal
-                    speakAnnouncement(data);
-                };
-                
-                // Load audio
-                audioElement.load();
-            }
-            
-            function playResponsiveVoice(audioUrl) {
-                console.log('=== PLAYING RESPONSIVEVOICE ===');
-                
-                try {
-                    // Decode text from URL
-                    const encodedText = audioUrl.replace('responsivevoice://', '');
-                    const text = atob(encodedText);
-                    
-                    console.log('ResponsiveVoice text:', text);
-                    
-                    // Check if ResponsiveVoice is loaded
-                    if (typeof responsiveVoice !== 'undefined') {
-                        console.log('ResponsiveVoice settings:', RESPONSIVEVOICE_CONFIG);
-                        
-                        responsiveVoice.speak(text, RESPONSIVEVOICE_CONFIG.voice, {
-                            rate: RESPONSIVEVOICE_CONFIG.rate,
-                            pitch: RESPONSIVEVOICE_CONFIG.pitch,
-                            volume: RESPONSIVEVOICE_CONFIG.volume,
-                            onstart: function() {
-                                console.log('ResponsiveVoice started');
-                            },
-                            onend: function() {
-                                console.log('ResponsiveVoice ended');
-                            },
-                            onerror: function(error) {
-                                console.error('ResponsiveVoice error:', error);
-                                // Fallback ke speech synthesis
-                                speakAnnouncement(data);
-                            }
-                        });
-                    } else {
-                        console.error('ResponsiveVoice not loaded');
-                        // Fallback ke speech synthesis
-                        speakAnnouncement(data);
-                    }
-                } catch (error) {
-                    console.error('ResponsiveVoice decode error:', error);
-                    // Fallback ke speech synthesis
-                speakAnnouncement(data);
+
+                registerListener()
+                updateServiceTimer()
+                registerServiceStartedListener()
+                document.addEventListener('livewire:navigated', registerListener)
+
+                if (!serviceTimerTicker) {
+                    serviceTimerTicker = window.setInterval(updateServiceTimer, 1000)
                 }
-            }
-            
-            function speakAnnouncement(data) {
-                console.log('=== SPEAKING ANNOUNCEMENT ===');
-                console.log('Data:', data);
-                console.log('Speech synthesis available:', 'speechSynthesis' in window);
-                console.log('Audio enabled:', audioEnabled);
-                
-                if (!audioEnabled) {
-                    console.log('Audio not enabled yet, enabling now...');
-                    enableAudio();
-                }
-                
-                if ('speechSynthesis' in window) {
-                    const utterance = new SpeechSynthesisUtterance();
-                    
-                    // Handle undefined values dengan data yang lebih lengkap
-                    // Ganti tanda minus dengan spasi agar tidak terbaca oleh audio
-                    const queueNumber = (data.queueNumber || 'Tidak diketahui').replace(/-/g, ' ');
-                    const serviceName = data.serviceName || 'Layanan';
-                    const counterName = data.counterName || 'Loket';
-                    const zona = data.zona || 'Zona';
-                    
-                    // Buat teks pemanggilan yang lebih informatif dan mudah dipahami
-                    utterance.text = `Nomor antrian ${queueNumber}, untuk layanan ${serviceName}, silakan menuju ke ${counterName} di ${zona}. Terima kasih.`;
-                    utterance.lang = 'id-ID';
-                    utterance.rate = 0.8; // Kecepatan agak lambat
-                    utterance.pitch = 1;
-                    utterance.volume = 1;
-                    
-                    console.log('Utterance text:', utterance.text);
-                    console.log('Utterance lang:', utterance.lang);
-                    
-                    // Coba gunakan voice Indonesia jika tersedia
-                    const voices = speechSynthesis.getVoices();
-                    console.log('Available voices:', voices.length);
-                    
-                    const indonesianVoice = voices.find(voice => 
-                        voice.lang.includes('id') || voice.lang.includes('ID')
-                    );
-                    if (indonesianVoice) {
-                        utterance.voice = indonesianVoice;
-                        console.log('Using Indonesian voice:', indonesianVoice.name);
-                    } else {
-                        console.log('No Indonesian voice found, using default');
-                    }
-                    
-                    // Event handlers
-                    utterance.onstart = () => console.log('Speech started');
-                    utterance.onend = () => console.log('Speech ended');
-                    utterance.onerror = (e) => console.log('Speech error:', e.error);
-                    
-                    console.log('Starting speech synthesis...');
-                    speechSynthesis.speak(utterance);
-                } else {
-                    console.log('Speech synthesis not supported');
-                }
-            }
-        });
+            })
+
+            window.enableAudio = enableAudio
+        })()
     </script>
 </x-filament-panels::page>

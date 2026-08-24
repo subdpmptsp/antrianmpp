@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Instansi;
 use App\Models\Queue;
 use App\Models\Service;
+use App\Services\KioskCatalogService;
 use App\Services\MasterDataCache;
 use App\Services\QueueService;
 use Illuminate\Http\JsonResponse;
@@ -15,24 +15,18 @@ use Illuminate\Support\Str;
 
 class PublicQueueKioskController extends Controller
 {
-    public function __construct(private readonly MasterDataCache $masterData) {}
+    public function __construct(
+        private readonly MasterDataCache $masterData,
+        private readonly KioskCatalogService $catalog,
+    ) {}
 
     public function index(Request $request)
     {
         $queueRequestToken = (string) Str::uuid();
         $request->session()->put('queue_request_token', $queueRequestToken);
 
-        $instansis = $this->masterData->remember(
-            'kiosk:institutions:active:v1',
-            fn () => Instansi::query()
-                ->whereNotNull('counter_id')
-                ->whereHas('services', fn ($query) => $query->where('is_active', true))
-                ->withCount([
-                    'services as active_services_count' => fn ($query) => $query->where('is_active', true),
-                ])
-                ->orderBy('nama_instansi')
-                ->get(),
-        );
+        $instansis = $this->catalog->rankedInstitutions();
+        $institutionColumns = $this->catalog->splitInstitutions($instansis);
 
         $selectedInstansi = $request->integer('instansi') ?: null;
         $selectedInstitution = $selectedInstansi
@@ -57,6 +51,8 @@ class PublicQueueKioskController extends Controller
         return view('public.queue-kiosk', [
             'selectedInstansi' => $selectedInstansi,
             'instansis' => $instansis,
+            'popularInstansis' => $institutionColumns['popular'],
+            'otherInstansis' => $institutionColumns['others'],
             'services' => $services,
             'queueRequestToken' => $queueRequestToken,
         ]);

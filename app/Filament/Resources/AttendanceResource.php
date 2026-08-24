@@ -3,28 +3,23 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\AttendanceResource\Pages;
-use App\Filament\Resources\AttendanceResource\RelationManagers;
 use App\Models\Attendance;
-use App\Models\Instansi;
+use Carbon\Carbon;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Collection;
 
 class AttendanceResource extends Resource
 {
     protected static ?string $model = Attendance::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
-    
-    protected static ?string $navigationLabel = 'Absensi Petugas';
-    
+
+    protected static ?string $navigationLabel = 'Kehadiran Petugas';
+
     protected static ?string $navigationGroup = 'Monitoring';
 
     public static function canViewAny(): bool
@@ -97,7 +92,7 @@ class AttendanceResource extends Resource
                             ->id('attendance-date-filter')
                             ->extraAttributes([
                                 'name' => 'attendance-date-filter',
-                                'aria-label' => 'Filter Tanggal Absensi'
+                                'aria-label' => 'Filter Tanggal Absensi',
                             ]),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
@@ -107,9 +102,10 @@ class AttendanceResource extends Resource
                     ->indicateUsing(function (array $data): array {
                         $indicators = [];
                         if ($data['date'] ?? null) {
-                            $indicators[] = Tables\Filters\Indicator::make('Tanggal: ' . \Carbon\Carbon::parse($data['date'])->format('d M Y'))
+                            $indicators[] = Tables\Filters\Indicator::make('Tanggal: '.Carbon::parse($data['date'])->format('d M Y'))
                                 ->removeField('date');
                         }
+
                         return $indicators;
                     }),
             ])
