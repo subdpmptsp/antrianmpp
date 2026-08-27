@@ -133,6 +133,7 @@
 
                 <div class="queue-kiosk__service-grid">
                     @forelse ($services as $service)
+                        @php($isAcceptingQueues = (bool) $service->is_accepting_queues)
                         @if (! $isLivewire)
                             <form
                                 id="kiosk-service-{{ $service->id }}"
@@ -148,17 +149,19 @@
 
                         <button
                             type="button"
-                            class="queue-kiosk__service-card"
+                            class="queue-kiosk__service-card {{ $isAcceptingQueues ? '' : 'is-unavailable' }}"
                             data-kiosk-service
                             data-service-id="{{ $service->id }}"
+                            data-queue-closed="{{ $isAcceptingQueues ? 'false' : 'true' }}"
                             @if (! $isLivewire) data-form-id="kiosk-service-{{ $service->id }}" @endif
+                            @disabled(! $isAcceptingQueues)
                         >
                             <span class="queue-kiosk__service-icon">
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v7H6zM18 12h.01"/></svg>
                             </span>
                             <span class="queue-kiosk__service-copy">
                                 <strong>{{ $service->name }}</strong>
-                                <small>Sentuh untuk mencetak tiket</small>
+                                <small>{{ $isAcceptingQueues ? 'Sentuh untuk mencetak tiket' : 'Sementara tidak menerima nomor baru' }}</small>
                             </span>
                             <svg class="queue-kiosk__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                         </button>

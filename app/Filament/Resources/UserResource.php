@@ -97,13 +97,25 @@ class UserResource extends Resource
                     ->helperText('Akun nonaktif tidak dihitung dalam kehadiran.'),
                 Forms\Components\Select::make('service_id')
                     ->label('Layanan')
-                    ->options(Service::where('is_active', true)->pluck('name', 'id'))
+                    ->options(fn (): array => Service::query()
+                        ->where('is_active', true)
+                        ->orderBy('prefix')
+                        ->get()
+                        ->mapWithKeys(fn (Service $service): array => [
+                            $service->id => $service->prefix.' — '.$service->name,
+                        ])
+                        ->all())
                     ->visible(fn (Get $get) => $get('role') === 'operator')
                     ->required(fn (Get $get) => $get('role') === 'operator')
                     ->disabled(fn () => Auth::user()->role === 'operator'),
                 Forms\Components\Select::make('counter_id')
                     ->label('Loket')
-                    ->options(Counter::withoutGlobalScopes()->orderBy('name')->pluck('name', 'id'))
+                    ->options(fn (): array => Counter::withoutGlobalScopes()
+                        ->orderBy('name')
+                        ->orderBy('code_loket')
+                        ->get()
+                        ->mapWithKeys(fn (Counter $counter): array => [$counter->id => $counter->display_name.' — '.$counter->name])
+                        ->all())
                     ->visible(fn (Get $get) => $get('role') === 'operator')
                     ->required(fn (Get $get) => $get('role') === 'operator')
                     ->disabled(fn () => Auth::user()->role === 'operator')

@@ -98,7 +98,9 @@
     .queue-kiosk__service-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; align-content: start; }
     .queue-kiosk__service-form { display: none; }
     .queue-kiosk__service-card { min-height: 88px; padding: 12px 14px; }
-    .queue-kiosk__service-card:disabled { opacity: .55; pointer-events: none; }
+    .queue-kiosk__service-card:disabled, .queue-kiosk__service-card.is-unavailable { color: #6b7280; border-color: #d1d5db; background: #e5e7eb; box-shadow: none; opacity: 1; cursor: not-allowed; pointer-events: none; }
+    .queue-kiosk__service-card.is-unavailable .queue-kiosk__service-icon { color: #9ca3af; background: #f3f4f6; }
+    .queue-kiosk__service-card.is-unavailable small { color: #6b7280; }
     .queue-kiosk__empty { grid-column: 1 / -1; padding: 42px 20px; text-align: center; border: 2px dashed #cbd8e5; border-radius: 20px; background: #f8fbfe; }
     .queue-kiosk__empty h3 { margin: 0; font-size: 21px; }
     .queue-kiosk__empty p { margin: 7px 0 0; color: var(--kiosk-muted); }

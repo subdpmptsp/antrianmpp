@@ -13,6 +13,7 @@ class Counter extends Model
 
     protected $fillable = [
         'name',
+        'code_loket',
         'instansi_id',
         'service_id',
         'is_active',
@@ -93,6 +94,11 @@ class Counter extends Model
             ->exists();
 
         return ! $hasActiveQueue && $this->is_active;
+    }
+
+    public function getDisplayNameAttribute(): string
+    {
+        return $this->code_loket ? 'Loket '.$this->code_loket : $this->name;
     }
 
     // Get current serving queue (prioritas: serving > called)

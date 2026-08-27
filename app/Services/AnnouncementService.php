@@ -44,7 +44,7 @@ class AnnouncementService
             'queueId' => $queue->id,
             'queueNumber' => $queue->number,
             'serviceName' => $queue->service?->name ?? 'Layanan',
-            'counterName' => $queue->counter?->name ?? 'Loket',
+            'counterName' => $queue->counter?->display_name ?? 'Loket',
             'zona' => $queue->counter?->instansi?->nama_instansi ?? 'Zona',
             'calledAt' => $queue->called_at->format('H:i:s'),
         ];

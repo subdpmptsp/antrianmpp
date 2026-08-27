@@ -75,12 +75,13 @@ class PublicQueueKioskController extends Controller
         if (
             ! $service
             || ! $service->is_active
+            || ! $service->is_accepting_queues
             || ! $service->instansi
             || ! $service->instansi->counter_id
             || (int) $service->instansi_id !== $selectedInstansi
         ) {
             return response()->json([
-                'message' => 'Layanan tidak aktif atau tidak tersedia pada instansi yang dipilih.',
+                'message' => 'Layanan sedang tidak menerima nomor antrean baru. Silakan pilih layanan lain atau hubungi petugas.',
             ], 422);
         }
 

@@ -46,7 +46,9 @@
         const setLoading = (visible) => {
             loading?.classList.toggle('is-visible', visible)
             loading?.setAttribute('aria-hidden', visible ? 'false' : 'true')
-            serviceButtons.forEach((button) => { button.disabled = visible })
+            serviceButtons.forEach((button) => {
+                button.disabled = visible || button.dataset.queueClosed === 'true'
+            })
         }
 
         const goHome = async () => {

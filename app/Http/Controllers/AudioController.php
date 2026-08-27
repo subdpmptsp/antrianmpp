@@ -43,7 +43,7 @@ class AudioController extends Controller
         $service = $queue->service;
         abort_unless($service, 404, 'Layanan tidak ditemukan.');
 
-        $counterName = $queue->counter?->name ?? 'Loket';
+        $counterName = $queue->counter?->display_name ?? 'Loket';
         $zona = $service->instansi?->counter?->name ?? 'Zona';
         $text = "Nomor antrian {$queue->number}, layanan {$service->name}, menuju ke loket {$counterName}, {$zona}. Terima kasih.";
         $audioUrl = $audioService->generateAudioUrl($text, config('audio.default_service', 'default'));

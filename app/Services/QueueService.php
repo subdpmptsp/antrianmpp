@@ -65,6 +65,7 @@ class QueueService
         return DB::transaction(function () use ($serviceId, $status) {
             $service = Service::query()
                 ->where('is_active', true)
+                ->where('is_accepting_queues', true)
                 ->lockForUpdate()
                 ->findOrFail($serviceId);
 

@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\CounterResource\Pages;
 use App\Models\Counter;
+use App\Models\Instansi;
 use App\Models\Service;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -48,29 +49,27 @@ class CounterResource extends Resource
         return static::canAccess();
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with(['instansi', 'service']);
+    }
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                TextInput::make('name')
-                    ->label('Nama Loket')
+                Select::make('name')
+                    ->label('Zona')
+                    ->options(fn (): array => collect(config('tv.zones', []))
+                        ->mapWithKeys(fn (array $zone): array => [$zone['name'] => $zone['name']])
+                        ->all())
                     ->required(),
 
-                Toggle::make('is_active')
-                    ->label('Status Aktif')
-                    ->default(true),
-
-                // Hubungkan ke Instansi
                 Select::make('instansi_id')
                     ->label('Instansi')
                     ->relationship('instansi', 'nama_instansi')
                     ->searchable()
                     ->preload()
-                    ->createOptionForm([
-                        TextInput::make('nama_instansi')
-                            ->label('Nama Instansi')
-                            ->required(),
-                    ])
                     ->required()
                     ->reactive()
                     ->afterStateUpdated(function ($state, callable $set) {
@@ -78,7 +77,12 @@ class CounterResource extends Resource
                         $set('service_id', null);
                     }),
 
-                // Pilih layanan yang akan ditangani oleh counter ini (1:1 relationship)
+                TextInput::make('code_loket')
+                    ->label('Kode Loket')
+                    ->helperText('Kode fisik loket, misalnya 3A-1. Biarkan kosong jika loket belum memakai kode khusus.')
+                    ->maxLength(20)
+                    ->unique(ignoreRecord: true),
+
                 Select::make('service_id')
                     ->label('Layanan')
                     ->options(function ($get) {
@@ -88,12 +92,20 @@ class CounterResource extends Resource
                         }
 
                         return Service::where('instansi_id', $instansiId)
-                            ->pluck('name', 'id');
+                            ->orderBy('prefix')
+                            ->get()
+                            ->mapWithKeys(fn (Service $service): array => [
+                                $service->id => $service->prefix.' — '.$service->name,
+                            ])
+                            ->all();
                     })
                     ->searchable()
                     ->reactive()
                     ->required(),
 
+                Toggle::make('is_active')
+                    ->label('Status Aktif')
+                    ->default(true),
             ]);
     }
 
@@ -101,19 +113,28 @@ class CounterResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')
-                    ->label('Nama Loket')
+                Tables\Columns\TextColumn::make('code_loket')
+                    ->label('Loket')
+                    ->formatStateUsing(fn (?string $state): string => $state ?: 'Belum berkode')
                     ->weight('bold')
-                    ->searchable(),
-                Tables\Columns\ToggleColumn::make('is_active')
-                    ->label('Status Aktif'),
-                Tables\Columns\TextColumn::make('instansi.nama_instansi')
-                    ->label('Instansi')
-                    ->sortable(),
+                    ->searchable()
+                    ->description(function (Counter $record): string {
+                        $details = collect([$record->name, $record->instansi?->nama_instansi])->filter();
+
+                        return $details->isNotEmpty()
+                            ? $details->implode(' · ')
+                            : 'Zona atau instansi belum ditentukan';
+                    })
+                    ->wrap(),
                 Tables\Columns\TextColumn::make('service.name')
                     ->label('Layanan')
-                    ->badge()
-                    ->searchable(),
+                    ->tooltip('Layanan antrean yang dipanggil dari loket ini.')
+                    ->searchable()
+                    ->wrap()
+                    ->placeholder('Belum ditentukan'),
+                Tables\Columns\ToggleColumn::make('is_active')
+                    ->label('Status')
+                    ->tooltip('Menentukan apakah loket siap digunakan.'),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -142,10 +163,17 @@ class CounterResource extends Resource
                         return $query->where('name', $zoneName);
                     })
                     ->placeholder('Semua zona'),
+                SelectFilter::make('instansi_id')
+                    ->label('Instansi')
+                    ->options(fn (): array => Instansi::query()
+                        ->orderBy('nama_instansi')
+                        ->pluck('nama_instansi', 'instansi_id')
+                        ->all())
+                    ->searchable(),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\EditAction::make()->label('Edit'),
+                Tables\Actions\DeleteAction::make()->label('Hapus'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

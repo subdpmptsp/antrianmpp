@@ -58,7 +58,7 @@ class TvDisplayController extends Controller
                     'nextQueue' => $nextQueue ? $nextQueue->number : null,
                     'servingQueue' => $servingQueue ? [
                         'number' => $servingQueue->number,
-                        'counter' => $servingQueue->counter ? $servingQueue->counter->name : null,
+                        'counter' => $servingQueue->counter?->display_name,
                     ] : null,
                     'activeCounters' => $activeCounters,
                     'totalCounters' => $activeCounters,
@@ -77,7 +77,7 @@ class TvDisplayController extends Controller
                 return [
                     'number' => $queue->number,
                     'service' => $queue->service ? $queue->service->name : 'Layanan',
-                    'counter' => $queue->counter ? $queue->counter->name : 'Loket',
+                    'counter' => $queue->counter?->display_name ?? 'Loket',
                 ];
             });
 
@@ -92,7 +92,7 @@ class TvDisplayController extends Controller
             ->get()
             ->map(function ($counter) {
                 return [
-                    'name' => $counter->name,
+                    'name' => $counter->display_name,
                     'service' => $counter->service ? $counter->service->name : 'Layanan',
                 ];
             });
@@ -207,7 +207,7 @@ class TvDisplayController extends Controller
 
             $queueData = [
                 'counter_id' => $counter->id,
-                'counter_name' => $counter->name,
+                'counter_name' => $counter->display_name,
                 'status' => 'available',
                 'queue_number' => null,
                 'service_name' => null,

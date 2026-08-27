@@ -74,7 +74,7 @@ class QueueResource extends Resource
                     ->alignment(Alignment::Center),
                 Tables\Columns\TextColumn::make('service.name')
                     ->label('Layanan')
-                    ->description(fn (Queue $record): string => optional($record->counter)->name ? "Loket: {$record->counter->name}" : 'Loket: Belum dipanggil'),
+                    ->description(fn (Queue $record): string => $record->counter ? "Loket: {$record->counter->display_name}" : 'Loket: Belum dipanggil'),
                 Tables\Columns\TextColumn::make('status'),
                 Tables\Columns\TextColumn::make('called_at')
                     ->label('Dipanggil')

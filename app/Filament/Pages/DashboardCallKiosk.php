@@ -3,14 +3,17 @@
 namespace App\Filament\Pages;
 
 use App\Models\Counter;
+use App\Models\CounterClosureRequest;
 use App\Models\Queue;
 use App\Models\Service;
 use App\Services\AudioConfigurationService;
+use App\Services\CounterClosureService;
 use App\Services\QueueService;
 use Filament\Pages\Page;
 use Illuminate\Contracts\View\View; // Penting untuk method render
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class DashboardCallKiosk extends Page
 {
@@ -41,6 +44,7 @@ class DashboardCallKiosk extends Page
 
     public ?int $selectedCounterId = null; // ID dari loket yang sedang dipilih
     public ?string $selectedZone = null;
+    public ?string $closeReason = null;
 
     /**
      * Method `mount` dijalankan sekali saat komponen pertama kali dimuat.
@@ -80,7 +84,7 @@ class DashboardCallKiosk extends Page
                     'user_id' => $user->id,
                     'user_name' => $user->name,
                     'counter_id' => $counter->id,
-                    'counter_name' => $counter->name,
+                    'counter_name' => $counter->display_name,
                     'service_id' => $counter->service_id,
                     'service_name' => $counter->service?->name,
                     'instansi_id' => $counter->instansi_id,
@@ -193,6 +197,19 @@ class DashboardCallKiosk extends Page
         return $counter;
     }
 
+    public function getPendingClosureRequestProperty(): ?CounterClosureRequest
+    {
+        if (! $this->selectedCounter) {
+            return null;
+        }
+
+        return CounterClosureRequest::query()
+            ->where('counter_id', $this->selectedCounter->id)
+            ->where('status', CounterClosureRequest::STATUS_PENDING)
+            ->latest('requested_at')
+            ->first();
+    }
+
     // --- Aksi yang Dipanggil dari View ---
 
     /**
@@ -223,7 +240,7 @@ class DashboardCallKiosk extends Page
         $counter = $query->find($counterId);
         Log::debug('Counter selected', [
             'counter_id' => $counterId,
-            'counter_name' => $counter?->name,
+            'counter_name' => $counter?->display_name,
             'service_id' => $counter?->service_id,
             'service_name' => $counter?->service?->name,
             'instansi_id' => $counter?->instansi_id,
@@ -308,7 +325,7 @@ class DashboardCallKiosk extends Page
 
         Log::debug('Service IDs for counter', [
             'counter_id' => $this->selectedCounter->id,
-            'counter_name' => $this->selectedCounter->name,
+            'counter_name' => $this->selectedCounter->display_name,
             'service_ids' => $serviceIds,
             'services_found' => $allServicesFound,
             'direct_service_id' => $this->selectedCounter->service_id,
@@ -319,14 +336,14 @@ class DashboardCallKiosk extends Page
         if (empty($serviceIds)) {
             Log::warning('Counter does not have any service_id', [
                 'counter_id' => $this->selectedCounter->id,
-                'counter_name' => $this->selectedCounter->name,
+                'counter_name' => $this->selectedCounter->display_name,
                 'counter_data' => $this->selectedCounter->toArray(),
             ]);
 
             // Dispatch notification untuk user
             $this->dispatch('notify', [
                 'type' => 'warning',
-                'message' => 'Loket '.$this->selectedCounter->name.' belum memiliki layanan yang ditetapkan. Silakan hubungi administrator.',
+                'message' => $this->selectedCounter->display_name.' belum memiliki layanan yang ditetapkan. Silakan hubungi administrator.',
             ]);
 
             return;
@@ -349,7 +366,7 @@ class DashboardCallKiosk extends Page
 
             Log::debug('No queue found by service_id', [
                 'counter_id' => $this->selectedCounter->id,
-                'counter_name' => $this->selectedCounter->name,
+            'counter_name' => $this->selectedCounter->display_name,
                 'service_ids' => $serviceIds,
                 'waiting_queues_count' => $waitingQueuesCount,
                 'all_waiting_queues' => Queue::where('status', 'waiting')
@@ -382,7 +399,7 @@ class DashboardCallKiosk extends Page
                 'queueNumber' => $nextQueue->number,
                 'serviceName' => $serviceName,
                 'servicePrefix' => $servicePrefix,
-                'counterName' => $this->selectedCounter->name,
+                'counterName' => $this->selectedCounter->display_name,
                 'zona' => $zonaName,
                 'calledAt' => now()->format('H:i:s'),
             ];
@@ -444,7 +461,7 @@ class DashboardCallKiosk extends Page
             'queueNumber' => $queue->number,
             'serviceName' => $serviceName,
             'servicePrefix' => $servicePrefix,
-            'counterName' => $this->selectedCounter->name,
+            'counterName' => $this->selectedCounter->display_name,
             'zona' => $zonaName,
             'calledAt' => now()->format('H:i:s'),
         ];
@@ -508,16 +525,57 @@ class DashboardCallKiosk extends Page
         );
     }
 
-    public function toggleCounterStatus()
+    public function requestCounterClosure(CounterClosureService $closureService): void
     {
-        if ($this->selectedCounter) {
-            $this->selectedCounter->update([
-                'is_active' => ! $this->selectedCounter->is_active,
+        if (! $this->selectedCounter) {
+            return;
+        }
+
+        if (blank($this->closeReason)) {
+            $message = 'Deskripsi alasan harus diisi.';
+            $this->addError('closeReason', $message);
+            $this->dispatch('notify', [
+                'type' => 'warning',
+                'message' => $message,
             ]);
-            // Refresh data loket di navigasi (sama seperti di manajemen loket)
-            $this->counters = Counter::with(['service', 'instansi'])
-                ->orderBy('name')
-                ->get();
+
+            return;
+        }
+
+        $this->resetErrorBag('closeReason');
+
+        try {
+            $closureService->requestClose($this->selectedCounter, Auth::user(), (string) $this->closeReason);
+            $this->closeReason = null;
+            $this->dispatch('notify', [
+                'type' => 'success',
+                'message' => 'Permintaan tutup loket sudah dikirim dan menunggu persetujuan admin.',
+            ]);
+        } catch (ValidationException $exception) {
+            $this->dispatch('notify', [
+                'type' => 'warning',
+                'message' => collect($exception->errors())->flatten()->first() ?? 'Permintaan tidak dapat diproses.',
+            ]);
+        }
+    }
+
+    public function reopenCounter(CounterClosureService $closureService): void
+    {
+        if (! $this->selectedCounter) {
+            return;
+        }
+
+        try {
+            $closureService->reopen($this->selectedCounter, Auth::user());
+            $this->dispatch('notify', [
+                'type' => 'success',
+                'message' => 'Loket kembali menerima nomor antrean baru. Waktu buka kembali telah dicatat.',
+            ]);
+        } catch (ValidationException $exception) {
+            $this->dispatch('notify', [
+                'type' => 'warning',
+                'message' => collect($exception->errors())->flatten()->first() ?? 'Loket tidak dapat dibuka kembali.',
+            ]);
         }
     }
 

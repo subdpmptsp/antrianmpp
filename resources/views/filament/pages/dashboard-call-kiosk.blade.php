@@ -80,32 +80,47 @@
             
             @php $user = auth()->user(); @endphp
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-end">
-                <div class="lg:col-span-2">
-                    <label for="zone-filter" class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Filter Zona</label>
-                    <select
-                        id="zone-filter"
-                        class="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-3 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        wire:change="selectZone($event.target.value)"
-                    >
-                        @forelse ($this->zoneOptions as $zone)
-                            <option value="{{ $zone }}" @selected($selectedZone === $zone)>{{ $zone }}</option>
-                        @empty
-                            <option value="">Tidak ada zona aktif</option>
-                        @endforelse
-                    </select>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                        Yang ditampilkan hanya kartu pada zona terpilih agar halaman lebih ringan.
-                    </p>
-                </div>
-                <div class="lg:col-span-1">
-                    <div class="rounded-xl border border-gray-200 dark:border-gray-600 bg-blue-50 dark:bg-blue-900/20 p-4">
-                        <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Zona aktif</div>
-                        <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ $selectedZone ?? '-' }}</div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            {{ $this->visibleCounters->count() }} kartu loket tampil
+                @if($user?->isOperator())
+                    @php
+                        $assignedCounter = $this->selectedCounter;
+                    @endphp
+                    <div class="lg:col-span-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
+                        <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Loket Tugas Anda</div>
+                        <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                            {{ $assignedCounter?->display_name ?? '-' }}
+                        </div>
+                        <div class="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                            {{ $assignedCounter?->name ?? '-' }} · {{ $assignedCounter?->service?->name ?? 'Layanan belum ditentukan' }}
                         </div>
                     </div>
-                </div>
+                @else
+                    <div class="lg:col-span-2">
+                        <label for="zone-filter" class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Filter Zona</label>
+                        <select
+                            id="zone-filter"
+                            class="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-3 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            wire:change="selectZone($event.target.value)"
+                        >
+                            @forelse ($this->zoneOptions as $zone)
+                                <option value="{{ $zone }}" @selected($selectedZone === $zone)>{{ $zone }}</option>
+                            @empty
+                                <option value="">Tidak ada zona aktif</option>
+                            @endforelse
+                        </select>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                            Yang ditampilkan hanya kartu pada zona terpilih agar halaman lebih ringan.
+                        </p>
+                    </div>
+                    <div class="lg:col-span-1">
+                        <div class="rounded-xl border border-gray-200 dark:border-gray-600 bg-blue-50 dark:bg-blue-900/20 p-4">
+                            <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Zona aktif</div>
+                            <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ $selectedZone ?? '-' }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                {{ $this->visibleCounters->count() }} kartu loket tampil
+                            </div>
+                        </div>
+                    </div>
+                @endif
             </div>
         </div>
 
@@ -328,9 +343,13 @@
                     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 card-hover">
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-6">Status Loket</h3>
                         @if($selectedCounter)
+                            @php
+                                $isAcceptingQueues = (bool) ($selectedCounter->service?->is_accepting_queues);
+                                $pendingClosureRequest = $this->pendingClosureRequest;
+                            @endphp
                             <div class="text-center">
-                                <div class="w-20 h-20 bg-gradient-to-br from-{{ $selectedCounter->is_active ? 'green' : 'red' }}-500 to-{{ $selectedCounter->is_active ? 'green' : 'red' }}-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-                                    @if($selectedCounter->is_active)
+                                <div class="w-20 h-20 bg-gradient-to-br from-{{ $isAcceptingQueues ? 'green' : 'amber' }}-500 to-{{ $isAcceptingQueues ? 'green' : 'amber' }}-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                                    @if($isAcceptingQueues)
                                         <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                         </svg>
@@ -341,7 +360,7 @@
                                     @endif
                                 </div>
                                 <p class="text-sm text-gray-500 dark:text-gray-400 mb-2 font-semibold">
-                                    {{ strtoupper($selectedCounter->name) }}
+                                    {{ strtoupper($selectedCounter->display_name) }}
                                 </p>
                                 <div class="mb-4">
                                     @if($selectedCounter->service)
@@ -352,13 +371,34 @@
                                         <span class="text-gray-500 text-sm">Tidak ada layanan</span>
                                     @endif
                                 </div>
-                                <p class="text-xl font-bold text-{{ $selectedCounter->is_active ? 'green' : 'red' }}-600 mb-6">
-                                    {{ $selectedCounter->is_active ? 'SEDANG BUKA' : 'SEDANG TUTUP' }}
+                                <p class="text-xl font-bold text-{{ $isAcceptingQueues ? 'green' : 'amber' }}-600 mb-2">
+                                    {{ $isAcceptingQueues ? 'MENERIMA NOMOR BARU' : 'TUTUP UNTUK NOMOR BARU' }}
                                 </p>
-                                <button wire:click="toggleCounterStatus"
-                                    class="w-full bg-{{ $selectedCounter->is_active ? 'red' : 'green' }}-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-{{ $selectedCounter->is_active ? 'red' : 'green' }}-600 transition-colors duration-200 shadow-lg hover:shadow-xl">
-                                    {{ $selectedCounter->is_active ? 'Tutup Loket' : 'Buka Loket' }}
-                                </button>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                                    Call dan panggil ulang antrean yang sudah masuk tetap dapat dilakukan.
+                                </p>
+
+                                @if($pendingClosureRequest)
+                                    <div class="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 p-3 text-sm text-amber-800 dark:text-amber-200">
+                                        Menunggu persetujuan admin: {{ $pendingClosureRequest->reason }}
+                                    </div>
+                                @elseif($isAcceptingQueues)
+                                    <textarea wire:model="closeReason" rows="3" maxlength="1000"
+                                        placeholder="Contoh: gangguan sistem pusat."
+                                        class="w-full mb-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-white"></textarea>
+                                    @error('closeReason')
+                                        <p class="-mt-2 mb-3 text-xs font-medium text-red-600 dark:text-red-400">{{ $message }}</p>
+                                    @enderror
+                                    <button wire:click="requestCounterClosure"
+                                        class="w-full bg-red-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-red-600 transition-colors duration-200 shadow-lg hover:shadow-xl">
+                                        Ajukan Tutup Loket
+                                    </button>
+                                @else
+                                    <button wire:click="reopenCounter"
+                                        class="w-full bg-green-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-green-600 transition-colors duration-200 shadow-lg hover:shadow-xl">
+                                        Buka Loket
+                                    </button>
+                                @endif
                             </div>
                         @else
                             <div class="text-center text-gray-500 dark:text-gray-400">

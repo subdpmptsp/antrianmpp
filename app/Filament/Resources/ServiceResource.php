@@ -32,6 +32,11 @@ class ServiceResource extends Resource
         return auth()->user()?->can('access-admin-area') ?? false;
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with('instansi.counter');
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -82,16 +87,21 @@ class ServiceResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->label('Nama Layanan')
                     ->searchable()
-                    ->weight('bold'),
-                Tables\Columns\TextColumn::make('instansi.nama_instansi')
-                    ->label('Instansi')
-                    ->searchable()
-                    ->placeholder('Belum ditentukan'),
-                Tables\Columns\TextColumn::make('instansi.counter.name')
-                    ->label('Zona')
+                    ->weight('bold')
+                    ->description(function (Service $record): string {
+                        $details = collect([
+                            $record->instansi?->nama_instansi,
+                            $record->instansi?->counter?->name,
+                        ])->filter();
+
+                        return $details->isNotEmpty()
+                            ? $details->implode(' · ')
+                            : 'Instansi atau zona belum ditentukan';
+                    })
+                    ->wrap(),
+                Tables\Columns\TextColumn::make('prefix')
+                    ->label('Kode Antrian')
                     ->badge()
-                    ->placeholder('Belum ditentukan'),
-                Tables\Columns\TextColumn::make('prefix')            
                     ->alignCenter(),
                 Tables\Columns\TextColumn::make('padding')
                     ->label('Jumlah Digit Angka')
@@ -99,7 +109,7 @@ class ServiceResource extends Resource
                     ->alignCenter()
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\ToggleColumn::make('is_active')
-                    ->label('Is active')
+                    ->label('Status')
                     ->tooltip('Menandakan layanan sedang aktif atau tidak.'),
             ])
             ->filters([
@@ -129,8 +139,8 @@ class ServiceResource extends Resource
                     ->searchable(),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\EditAction::make()->label('Edit'),
+                Tables\Actions\DeleteAction::make()->label('Hapus'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
