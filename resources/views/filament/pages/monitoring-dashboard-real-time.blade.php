@@ -55,14 +55,23 @@
 
         <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
             <div class="grid gap-4 border-b border-gray-200 p-5 dark:border-gray-700 md:grid-cols-2">
-                <select wire:model.live="instansiFilter" class="rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900">
-                    <option value="">Semua instansi</option>
-                    @foreach ($instansiOptions as $id => $name)
-                        <option value="{{ $id }}">{{ $name }}</option>
-                    @endforeach
-                </select>
-                <input wire:model.live.debounce.500ms="search" type="search" placeholder="Cari layanan..."
-                       class="rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-600 dark:text-gray-300">Zona</label>
+                    <select wire:model.live="zoneFilter" class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                        <option value="">Semua zona</option>
+                        @foreach ($zoneOptions as $id => $name)
+                            <option value="{{ $id }}">{{ $name }}</option>
+                        @endforeach
+                    </select>
+                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        Pilih zona untuk membatasi data layanan agar tampilan lebih ringan.
+                    </p>
+                </div>
+                <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-600 dark:text-gray-300">Cari layanan</label>
+                    <input wire:model.live.debounce.500ms="search" type="search" placeholder="Cari layanan..."
+                           class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                </div>
             </div>
 
             <div class="overflow-x-auto">

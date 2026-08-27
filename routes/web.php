@@ -30,7 +30,7 @@ Route::middleware(['auth', 'admin'])
 Route::middleware(['auth', 'admin'])->get('/exports/monitoring-realtime', function (Request $request) {
     return Excel::download(
         new MonitoringRealtimeExport(
-            $request->string('instansi_id')->toString() ?: null,
+            $request->string('zone_id')->toString() ?: null,
             $request->string('search')->toString() ?: null,
         ),
         'monitoring-realtime-'.now()->format('Y-m-d-His').'.xlsx',

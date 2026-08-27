@@ -21,7 +21,7 @@ class MonitoringDashboardRealTime extends Page
 
     protected static ?string $title = '';
 
-    public ?string $instansiFilter = '';
+    public ?string $zoneFilter = '';
 
     public ?string $search = '';
 
@@ -61,13 +61,13 @@ class MonitoringDashboardRealTime extends Page
             'summary' => $service->getSummary(),
             'zones' => $service->getZones(),
             'services' => $service->getServices(
-                filled($this->instansiFilter) ? $this->instansiFilter : null,
+                filled($this->zoneFilter) ? $this->zoneFilter : null,
                 filled($this->search) ? $this->search : null,
             ),
-            'instansiOptions' => $service->getInstansiOptions(),
+            'zoneOptions' => $service->getZoneOptions(),
             'setting' => $setting,
             'exportUrl' => route('export.monitoring-realtime', array_filter([
-                'instansi_id' => $this->instansiFilter ?: null,
+                'zone_id' => $this->zoneFilter ?: null,
                 'search' => $this->search ?: null,
             ])),
         ];

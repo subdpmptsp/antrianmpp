@@ -10,6 +10,11 @@ class ManageServices extends ManageRecords
 {
     protected static string $resource = ServiceResource::class;
 
+    public function getSubheading(): ?string
+    {
+        return 'Halaman ini dipakai untuk mengatur layanan antrian. Nama layanan tampil di sistem, Prefix dipakai sebagai awalan nomor antrian, dan sistem memakai digit default secara otomatis.';
+    }
+
     protected function getHeaderActions(): array
     {
         return [

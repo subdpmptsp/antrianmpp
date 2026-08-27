@@ -21,6 +21,15 @@ class Service extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::creating(function (Service $service): void {
+            if ($service->padding === null || (int) $service->padding <= 0) {
+                $service->padding = 2;
+            }
+        });
+    }
+
     // Satu layanan dapat dilayani oleh beberapa loket; setiap loket memilih satu layanan.
     public function counters()
     {

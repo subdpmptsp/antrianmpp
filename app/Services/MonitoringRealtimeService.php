@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Counter;
-use App\Models\Instansi;
 use App\Models\Queue;
 use App\Models\Service;
 use Illuminate\Support\Collection;
@@ -37,18 +36,39 @@ class MonitoringRealtimeService
     {
         $today = now()->toDateString();
 
-        $zones = Counter::withoutGlobalScopes()
-            ->where('name', 'like', 'ZONA%')
-            ->selectRaw('MIN(id) as id, name')
+        $zones = collect(config('tv.zones', []))
+            ->map(function (array $configuredZone, int|string $zoneNumber): array {
+                return [
+                    'zone_number' => (int) $zoneNumber,
+                    'name' => (string) ($configuredZone['name'] ?? "ZONA {$zoneNumber}"),
+                ];
+            })
+            ->values();
+
+        // Satu zona dapat memiliki banyak loket fisik. Kelompokkan semuanya
+        // berdasarkan nama zona agar kartu dan filter tetap tampil satu kali per zona.
+        $counterIdsByZoneName = Counter::withoutGlobalScopes()
+            ->whereIn('name', $zones->pluck('name'))
+            ->get(['id', 'name'])
             ->groupBy('name')
-            ->orderBy('name')
-            ->get();
+            ->map(fn (Collection $counters) => $counters->pluck('id')->values());
+
+        $zoneNumberByCounterId = $zones->flatMap(function (array $zone) use ($counterIdsByZoneName) {
+            return $counterIdsByZoneName
+                ->get($zone['name'], collect())
+                ->mapWithKeys(fn (int $counterId): array => [$counterId => $zone['zone_number']]);
+        });
 
         $servicesByZone = DB::table('services')
             ->join('instansis', 'instansis.instansi_id', '=', 'services.instansi_id')
-            ->whereIn('instansis.counter_id', $zones->pluck('id'))
-            ->get(['services.id as service_id', 'instansis.counter_id as zone_id'])
-            ->groupBy('zone_id');
+            ->whereIn('instansis.counter_id', $zoneNumberByCounterId->keys())
+            ->get(['services.id as service_id', 'instansis.counter_id'])
+            ->map(fn ($service) => [
+                'service_id' => $service->service_id,
+                'zone_number' => $zoneNumberByCounterId->get($service->counter_id),
+            ])
+            ->filter(fn (array $service): bool => $service['zone_number'] !== null)
+            ->groupBy('zone_number');
 
         $queueCounts = DB::table('queues')
             ->whereDate('created_at', $today)
@@ -59,14 +79,15 @@ class MonitoringRealtimeService
             ->get()
             ->groupBy('service_id');
 
-        $zoneStats = $zones->map(function (Counter $zone) use ($servicesByZone, $queueCounts) {
-            $serviceIds = $servicesByZone->get($zone->id, collect())->pluck('service_id');
+        $zoneStats = $zones->map(function (array $zone) use ($servicesByZone, $queueCounts) {
+            $serviceIds = $servicesByZone->get($zone['zone_number'], collect())->pluck('service_id');
             $counts = $serviceIds
                 ->flatMap(fn ($serviceId) => $queueCounts->get($serviceId, collect()));
 
             return [
-                'id' => $zone->id,
-                'name' => $zone->name,
+                'id' => $zone['zone_number'],
+                'zone_number' => $zone['zone_number'],
+                'name' => $zone['name'],
                 'menunggu' => (int) $counts->where('status', Queue::STATUS_WAITING)->sum('total'),
                 'dilayani' => (int) $counts->where('status', Queue::STATUS_SERVING)->sum('total'),
             ];
@@ -89,7 +110,18 @@ class MonitoringRealtimeService
         });
     }
 
-    public function getServices(?string $instansiId = null, ?string $search = null): Collection
+    public function getZoneOptions(): Collection
+    {
+        return collect(config('tv.zones', []))
+            ->mapWithKeys(function (array $configuredZone, int|string $zoneNumber): array {
+                return [
+                    (string) $zoneNumber => (string) ($configuredZone['name'] ?? "ZONA {$zoneNumber}"),
+                ];
+            })
+            ->sortKeys();
+    }
+
+    public function getServices(?string $zoneId = null, ?string $search = null): Collection
     {
         $today = now()->toDateString();
 
@@ -113,17 +145,19 @@ class MonitoringRealtimeService
                     ->whereDate('created_at', $today),
             ])
             ->where('is_active', true)
-            ->when(filled($instansiId), fn ($q) => $q->where('instansi_id', $instansiId))
+            ->when(filled($zoneId), function ($q) use ($zoneId): void {
+                $zoneName = (string) config("tv.zones.{$zoneId}.name", "ZONA {$zoneId}");
+                $counterIds = Counter::withoutGlobalScopes()
+                    ->where('name', $zoneName)
+                    ->pluck('id');
+
+                $q->whereHas('instansi.counter', function ($query) use ($counterIds): void {
+                    $query->whereIn('id', $counterIds);
+                });
+            })
             ->when(filled($search), fn ($q) => $q->where('name', 'like', '%'.$search.'%'))
             ->orderBy('name')
             ->get(['id', 'name', 'instansi_id']);
-    }
-
-    public function getInstansiOptions(): Collection
-    {
-        return Instansi::query()
-            ->orderBy('nama_instansi')
-            ->pluck('nama_instansi', 'instansi_id');
     }
 
     protected function getAverageWaitMinutes(string $today): ?float

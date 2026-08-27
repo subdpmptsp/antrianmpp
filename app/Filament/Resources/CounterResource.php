@@ -11,7 +11,9 @@ use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class CounterResource extends Resource
@@ -122,7 +124,24 @@ class CounterResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                SelectFilter::make('zona')
+                    ->label('Zona')
+                    ->options(fn (): array => Counter::withoutGlobalScopes()
+                        ->whereNotNull('name')
+                        ->where('name', '!=', '')
+                        ->orderBy('name')
+                        ->pluck('name', 'name')
+                        ->all())
+                    ->query(function (Builder $query, array $data): Builder {
+                        $zoneName = $data['value'] ?? null;
+
+                        if (! $zoneName) {
+                            return $query;
+                        }
+
+                        return $query->where('name', $zoneName);
+                    })
+                    ->placeholder('Semua zona'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

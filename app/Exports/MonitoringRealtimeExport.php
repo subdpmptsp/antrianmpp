@@ -12,14 +12,14 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 class MonitoringRealtimeExport implements FromCollection, ShouldAutoSize, WithHeadings, WithTitle
 {
     public function __construct(
-        protected ?string $instansiId = null,
+        protected ?string $zoneId = null,
         protected ?string $search = null,
     ) {}
 
     public function collection(): Collection
     {
         $services = app(MonitoringRealtimeService::class)
-            ->getServices($this->instansiId, $this->search);
+            ->getServices($this->zoneId, $this->search);
 
         return $services->map(fn ($service) => [
             'Layanan' => $service->name,
