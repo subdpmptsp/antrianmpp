@@ -78,39 +78,35 @@
                 </div>
             </div>
             
-            <!-- Counter Selection (hidden for operators) -->
             @php $user = auth()->user(); @endphp
-            @if(!$user || $user->role !== 'operator')
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    @forelse ($counters as $counter)
-                        <button type="button" wire:click="selectCounter({{ $counter->id }})"
-                            class="counter-button relative p-4 rounded-xl font-semibold transition-all duration-300 shadow-sm hover:shadow-lg {{ $selectedCounterId == $counter->id
-                                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg'
-                                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-2 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500' }}">
-                            <div class="text-center">
-                                <div class="text-lg font-bold">{{ $counter->name }}</div>
-                                <div class="text-sm opacity-90 mt-2">
-                                    @if($counter->service)
-                                        <span class="inline-block bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs px-2 py-1 rounded-full">
-                                            {{ $counter->service->name }}
-                                        </span>
-                                    @else
-                                        <span class="text-gray-500">Tidak ada layanan</span>
-                                    @endif
-                                </div>
-                                <div class="flex items-center justify-center mt-2">
-                                    <div class="w-2 h-2 {{ $counter->is_active ? 'bg-green-400' : 'bg-gray-400' }} rounded-full mr-2"></div>
-                                    <span class="text-xs">{{ $counter->is_active ? 'Aktif' : 'Nonaktif' }}</span>
-                                </div>
-                            </div>
-                        </button>
-                    @empty
-                        <div class="col-span-full text-center py-8">
-                            <p class="text-gray-500 dark:text-gray-400 text-lg">Tidak ada loket yang aktif saat ini.</p>
-                        </div>
-                    @endforelse
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-end">
+                <div class="lg:col-span-2">
+                    <label for="zone-filter" class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Filter Zona</label>
+                    <select
+                        id="zone-filter"
+                        class="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-3 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        wire:change="selectZone($event.target.value)"
+                    >
+                        @forelse ($this->zoneOptions as $zone)
+                            <option value="{{ $zone }}" @selected($selectedZone === $zone)>{{ $zone }}</option>
+                        @empty
+                            <option value="">Tidak ada zona aktif</option>
+                        @endforelse
+                    </select>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                        Yang ditampilkan hanya kartu pada zona terpilih agar halaman lebih ringan.
+                    </p>
                 </div>
-            @endif
+                <div class="lg:col-span-1">
+                    <div class="rounded-xl border border-gray-200 dark:border-gray-600 bg-blue-50 dark:bg-blue-900/20 p-4">
+                        <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Zona aktif</div>
+                        <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ $selectedZone ?? '-' }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {{ $this->visibleCounters->count() }} kartu loket tampil
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Audio Enable Notice -->
@@ -129,7 +125,7 @@
             $selectedCounterId = $this->selectedCounterId;
         @endphp
         
-        @if ($selectedCounter)
+        @if ($selectedCounter && $this->visibleCounters->isNotEmpty())
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <!-- Current Queue Section -->
                 <div class="lg:col-span-2 space-y-6">
@@ -290,8 +286,21 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        <button wire:click="markAsCancelled({{ $queue->id }})"
-                                            class="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-3 rounded-xl hover:bg-red-50 dark:hover:bg-red-900 transition-colors duration-200">
+                                        <button
+                                            type="button"
+                                            x-on:click.prevent="
+                                                window.Livewire?.dispatch('notify', {
+                                                    type: 'danger',
+                                                    message: 'Antrian {{ $queue->number }} akan di-skip. Silakan konfirmasi sebelum dilanjutkan.'
+                                                });
+                                                setTimeout(() => {
+                                                    if (confirm('Skip antrian {{ $queue->number }}? Aksi ini akan melewatkan pemohon ini.')) {
+                                                        $wire.markAsCancelled({{ $queue->id }});
+                                                    }
+                                                }, 150);
+                                            "
+                                            class="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-3 rounded-xl hover:bg-red-50 dark:hover:bg-red-900 transition-colors duration-200"
+                                        >
                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                             </svg>
@@ -471,17 +480,16 @@
                     </div>
                 @else
                     <h3 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-2">Silakan pilih loket</h3>
-                    <p class="text-gray-500 dark:text-gray-400">Pilih loket terlebih dahulu untuk memulai manajemen antrian</p>
+                    <p class="text-gray-500 dark:text-gray-400">Pilih zona terlebih dahulu untuk memulai manajemen antrian</p>
                 @endif
             </div>
         @endif
 
     </div>
 
-    <!-- Audio untuk pemanggilan -->
+    <!-- Audio opening untuk pemanggilan -->
     <audio id="announcementAudio" preload="auto">
-        <source src="/sounds/announcement.mp3" type="audio/mpeg">
-        <source src="/sounds/announcement.wav" type="audio/wav">
+        <source src="{{ $announcementOpeningAudioUrl ?? asset('sounds/opening.mp3') }}" type="audio/mpeg">
     </audio>
 
     <!-- ResponsiveVoice Script -->

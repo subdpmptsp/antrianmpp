@@ -40,6 +40,7 @@ class DashboardCallKiosk extends Page
     public $counters; // Akan menampung semua loket untuk navigasi
 
     public ?int $selectedCounterId = null; // ID dari loket yang sedang dipilih
+    public ?string $selectedZone = null;
 
     /**
      * Method `mount` dijalankan sekali saat komponen pertama kali dimuat.
@@ -72,6 +73,7 @@ class DashboardCallKiosk extends Page
             if ($counter) {
                 $this->counters = collect([$counter]);
                 $this->selectedCounterId = $counter->id; // Pastikan menggunakan counter->id, bukan user->counter_id
+                $this->selectedZone = $counter->name;
 
                 // Log untuk debugging
                 Log::debug('Operator counter loaded successfully', [
@@ -106,8 +108,28 @@ class DashboardCallKiosk extends Page
                 ->get();
             if ($this->counters->isNotEmpty()) {
                 $this->selectedCounterId = $this->counters->first()->id;
+                $this->selectedZone = $this->counters->first()->name;
             }
         }
+    }
+
+    public function getZoneOptionsProperty()
+    {
+        return Counter::withoutGlobalScopes()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name')
+            ->unique()
+            ->values();
+    }
+
+    public function getVisibleCountersProperty()
+    {
+        if (! $this->selectedZone) {
+            return $this->counters;
+        }
+
+        return $this->counters->filter(fn (Counter $counter): bool => $counter->name === $this->selectedZone)->values();
     }
 
     /**
@@ -208,6 +230,25 @@ class DashboardCallKiosk extends Page
         ]);
 
         // Livewire akan otomatis me-render ulang komponen dengan data baru
+    }
+
+    public function selectZone(string $zoneName): void
+    {
+        $user = Auth::user();
+
+        if ($user && $user->role === 'operator') {
+            $this->selectedZone = $user->counter?->name ?? $this->selectedZone;
+            $this->selectedCounterId = $user->counter_id;
+
+            return;
+        }
+
+        $this->selectedZone = $zoneName;
+
+        $firstVisibleCounter = $this->visibleCounters->first();
+        if ($firstVisibleCounter) {
+            $this->selectedCounterId = $firstVisibleCounter->id;
+        }
     }
 
     public function callNext(QueueService $queueService)
