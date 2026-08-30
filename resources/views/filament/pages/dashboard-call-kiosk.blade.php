@@ -144,6 +144,48 @@
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <!-- Current Queue Section -->
                 <div class="lg:col-span-2 space-y-6">
+                    @if ($callableServices->count() > 1)
+                        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+                            <div class="flex items-center justify-between gap-3 mb-3">
+                                <div>
+                                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Layanan yang dapat dipanggil</h3>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">Pilih layanan untuk memuat antrean dan tombol panggil yang sesuai.</p>
+                                </div>
+                                <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                                    Panggilan menuju {{ $selectedCounter->display_name }}
+                                </span>
+                            </div>
+                            <div class="flex flex-wrap gap-2" role="tablist" aria-label="Pilihan layanan loket">
+                                @foreach ($callableServices as $service)
+                                    <button
+                                        type="button"
+                                        wire:click="selectServiceTab({{ $service->id }})"
+                                        style="{{ $selectedServiceId === $service->id ? 'background-color: #2563eb !important; border-color: #1d4ed8 !important; color: #ffffff !important;' : '' }}"
+                                        @class([
+                                            'relative rounded-xl border-2 px-4 py-3 text-left transition-all duration-200',
+                                            'border-blue-700 pt-8 pr-16 text-white shadow-lg ring-2 ring-blue-200 dark:ring-blue-900' => $selectedServiceId === $service->id,
+                                            'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600' => $selectedServiceId !== $service->id,
+                                        ])
+                                    >
+                                        @if ($selectedServiceId === $service->id)
+                                            <span class="absolute right-2 top-2 rounded-full bg-white/20 px-2 py-1 text-[10px] font-bold uppercase leading-none tracking-wide text-white">Aktif</span>
+                                        @endif
+                                        <span class="block text-xs font-semibold opacity-80">{{ $service->prefix }}</span>
+                                        <span class="block text-sm font-semibold">{{ $service->name }}</span>
+                                        <span class="mt-1 inline-block text-xs {{ $selectedServiceId === $service->id ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400' }}">
+                                            {{ $service->waiting_count }} menunggu
+                                        </span>
+                                        @if ($selectedServiceId === $service->id)
+                                            <span class="mt-1 block text-[11px] font-medium text-blue-100">
+                                                Dipanggil dari {{ $selectedCounter->display_name }}
+                                            </span>
+                                        @endif
+                                    </button>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
                     <!-- Current Patient Card -->
                     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden card-hover">
                         @if ($currentQueue)
@@ -278,7 +320,7 @@
                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 14.142M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>
                                     </svg>
-                                    <span>Panggil Antrian Selanjutnya</span>
+                                    <span>Panggil {{ $activeService?->prefix ? 'Antrean '.$activeService->prefix : 'Antrean Selanjutnya' }}</span>
                                 </div>
                                 </button>
                             </div>
@@ -389,6 +431,13 @@
                                     @error('closeReason')
                                         <p class="-mt-2 mb-3 text-xs font-medium text-red-600 dark:text-red-400">{{ $message }}</p>
                                     @enderror
+                                    <label class="mb-3 flex cursor-pointer items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 p-3 text-left dark:border-blue-900/50 dark:bg-blue-900/20">
+                                        <input type="checkbox" wire:model="autoReopenCounter" class="mt-0.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500">
+                                        <span class="text-xs text-blue-800 dark:text-blue-200">
+                                            <span class="block font-semibold">Buka otomatis pada hari operasional berikutnya</span>
+                                            <span>Pukul 00.05. Hilangkan centang untuk tetap tutup sampai dibuka manual.</span>
+                                        </span>
+                                    </label>
                                     <button wire:click="requestCounterClosure"
                                         class="w-full bg-red-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-red-600 transition-colors duration-200 shadow-lg hover:shadow-xl">
                                         Ajukan Tutup Loket
@@ -527,11 +576,6 @@
 
     </div>
 
-    <!-- Audio opening untuk pemanggilan -->
-    <audio id="announcementAudio" preload="auto">
-        <source src="{{ $announcementOpeningAudioUrl ?? asset('sounds/opening.mp3') }}" type="audio/mpeg">
-    </audio>
-
     <!-- ResponsiveVoice Script -->
 
     <!-- Notification untuk tampilan TV -->
@@ -580,9 +624,17 @@
             }
 
             const normalizeAnnouncement = (data) => {
-                const queueNumber = String(data?.queueNumber || 'Tidak diketahui').replace(/-/g, ' ')
+                // Tanda penghubung pada nomor antrean adalah pemisah, bukan
+                // angka negatif. Koma membuat mesin suara memberi jeda singkat.
+                const queueNumber = String(data?.queueNumber || 'Tidak diketahui').replace(/-/g, ', ')
                 const serviceName = String(data?.serviceName || 'Layanan').toLowerCase()
-                const servicePrefix = String(data?.servicePrefix || 'A')
+                    .replace(/\bikd\b/gi, 'i ka de')
+                    .replace(/\byob\b/gi, 'ye o be')
+                const counterName = String(data?.counterName || 'Loket')
+                const zoneOneCounter = counterName.match(/^Loket\s+Z1-(\d{2})$/i)
+                const counterNameForSpeech = zoneOneCounter
+                    ? `loket ${Number(zoneOneCounter[1])}`
+                    : counterName
                 const zone = String(data?.zona || 'Zona')
                 const zoneText = zone.toUpperCase() === 'UPTSP' ? 'U-P-T-S-P' : zone.toLowerCase()
                 const finalServiceName = serviceName.includes('layanan') ? serviceName : `layanan ${serviceName}`
@@ -590,10 +642,11 @@
                 return {
                     queueNumber,
                     serviceName,
-                    servicePrefix,
+                    counterName,
+                    counterNameForSpeech,
                     zone,
                     zoneText,
-                    text: `nomor antrian ${queueNumber} menuju ke loket ${servicePrefix}, ${finalServiceName} ${zoneText}`,
+                    text: `nomor antrian ${queueNumber} menuju ke ${counterNameForSpeech}, ${finalServiceName} ${zoneText}`,
                 }
             }
 

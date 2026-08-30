@@ -133,7 +133,11 @@
 
                 <div class="queue-kiosk__service-grid">
                     @forelse ($services as $service)
-                        @php($isAcceptingQueues = (bool) $service->is_accepting_queues)
+                        @php
+                            $isAcceptingQueues = (bool) $service->is_accepting_queues;
+                            $isDisdukcapilConsultationCounter = (bool) $service->getAttribute('is_disdukcapil_consultation_counter');
+                            $isRecommendedConsultationCounter = (bool) $service->getAttribute('is_recommended_consultation_counter');
+                        @endphp
                         @if (! $isLivewire)
                             <form
                                 id="kiosk-service-{{ $service->id }}"
@@ -160,8 +164,17 @@
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v7H6zM18 12h.01"/></svg>
                             </span>
                             <span class="queue-kiosk__service-copy">
-                                <strong>{{ $service->name }}</strong>
-                                <small>{{ $isAcceptingQueues ? 'Sentuh untuk mencetak tiket' : 'Sementara tidak menerima nomor baru' }}</small>
+                                <strong>{{ $isDisdukcapilConsultationCounter ? "Loket {$service->prefix}" : $service->name }}</strong>
+                                @if ($isDisdukcapilConsultationCounter)
+                                    <small>
+                                        Konsultasi Kependudukan · {{ $service->active_queue_count }} pemohon menunggu
+                                    </small>
+                                    @if ($isRecommendedConsultationCounter)
+                                        <span class="queue-kiosk__recommendation">Disarankan</span>
+                                    @endif
+                                @else
+                                    <small>{{ $isAcceptingQueues ? 'Sentuh untuk mencetak tiket' : 'Sementara tidak menerima nomor baru' }}</small>
+                                @endif
                             </span>
                             <svg class="queue-kiosk__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                         </button>

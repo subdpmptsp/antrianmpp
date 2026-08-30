@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Exports\RekapLayananExport;
 use App\Models\Queue;
 use App\Models\Service;
+use App\Models\Instansi;
 use Filament\Actions\Action;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -39,6 +40,9 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
     public ?string $from = null;
 
     public ?string $to = null;
+
+    /** @var array<int, int> */
+    public array $expandedInstansiIds = [];
 
     public function mount(): void
     {
@@ -164,20 +168,36 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
         $from = now()->parse($this->from)->startOfDay();
         $to = now()->parse($this->to)->endOfDay();
 
-        return DB::table('instansis as i')
-            ->select(
-                'i.instansi_id',
-                'i.nama_instansi as name',
-                DB::raw('COUNT(q.id) as total_pemohon')
-            )
-            ->leftJoin('services as s', 's.instansi_id', '=', 'i.instansi_id')
-            ->leftJoin('queues as q', function ($join) use ($from, $to) {
-                $join->on('q.service_id', '=', 's.id')
-                    ->whereBetween('q.created_at', [$from, $to]);
-            })
-            ->groupBy('i.instansi_id', 'i.nama_instansi')
-            ->orderBy('i.nama_instansi')
-            ->get();
+        return Instansi::query()
+            ->whereHas('services', fn ($query) => $query->where('is_active', true))
+            ->with(['services' => function ($query) use ($from, $to): void {
+                $query->where('is_active', true)
+                    ->withCount([
+                        'queues as total_pemohon' => fn ($queue) => $queue->whereBetween('created_at', [$from, $to]),
+                    ])
+                    ->orderBy('prefix');
+            }])
+            ->orderBy('nama_instansi')
+            ->get()
+            ->map(function (Instansi $instansi) {
+                $instansi->total_pemohon = $instansi->services->sum('total_pemohon');
+
+                return $instansi;
+            });
+    }
+
+    public function toggleInstansi(int $instansiId): void
+    {
+        if (in_array($instansiId, $this->expandedInstansiIds, true)) {
+            $this->expandedInstansiIds = array_values(array_filter(
+                $this->expandedInstansiIds,
+                fn (int $id): bool => $id !== $instansiId,
+            ));
+
+            return;
+        }
+
+        $this->expandedInstansiIds[] = $instansiId;
     }
 
     public function exportExcel()

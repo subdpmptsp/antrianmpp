@@ -2,133 +2,83 @@
 
 namespace App\Exports;
 
+use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
-use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
-use Carbon\Carbon;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 
-class RekapLayananExport implements FromCollection, ShouldAutoSize, WithTitle, WithEvents
+class RekapLayananExport implements FromCollection, ShouldAutoSize, WithEvents, WithHeadings, WithTitle
 {
-    protected $from;
-    protected $to;
+    /** @var array<int, int> */
+    private array $institutionHeaderRows = [];
 
-    public function __construct($from, $to)
+    public function __construct(protected string $from, protected string $to) {}
+
+    public function headings(): array
     {
-        $this->from = $from;
-        $this->to   = $to;
+        return array_merge(['No.', 'Instansi / Layanan'], range(1, 31));
     }
 
-    public function collection()
+    public function collection(): Collection
     {
-        $from = now()->parse($this->from)->startOfDay();
-        $to   = now()->parse($this->to)->endOfDay();
+        $from = Carbon::parse($this->from)->startOfDay();
+        $to = Carbon::parse($this->to)->endOfDay();
+        $dates = collect(range(1, 31));
 
-        // Ambil semua instansi yang memiliki antrian dalam periode yang dipilih
-        $instansis = DB::table('instansis as i')
-            ->leftJoin('services as s', 'i.instansi_id', '=', 's.instansi_id')
-            ->leftJoin('queues as q', function($join) use ($from, $to) {
-                $join->on('q.service_id', '=', 's.id')
-                     ->whereBetween('q.created_at', [$from, $to]);
-            })
-            ->select('i.instansi_id', 'i.nama_instansi')
-            ->groupBy('i.instansi_id', 'i.nama_instansi')
+        $services = DB::table('services as s')
+            ->join('instansis as i', 'i.instansi_id', '=', 's.instansi_id')
+            ->where('s.is_active', true)
+            ->select(['s.id', 's.prefix', 's.name as service_name', 'i.instansi_id', 'i.nama_instansi'])
             ->orderBy('i.nama_instansi')
+            ->orderBy('s.prefix')
             ->get();
 
-        // Generate array tanggal lengkap untuk satu bulan (1-31)
-        $dates = [];
-        for ($day = 1; $day <= 31; $day++) {
-            $dates[] = $day;
-        }
+        $dailyCounts = DB::table('queues')
+            ->whereIn('service_id', $services->pluck('id'))
+            ->whereBetween('created_at', [$from, $to])
+            ->selectRaw('service_id, DATE(created_at) as queue_date, COUNT(*) as total')
+            ->groupBy('service_id', 'queue_date')
+            ->get()
+            ->groupBy('service_id')
+            ->map(fn (Collection $counts) => $counts->pluck('total', 'queue_date'));
 
-        $data = collect();
-        $no = 1;
+        $rows = collect();
+        $rowIndex = 0;
 
-        foreach ($instansis as $instansi) {
-            // Khusus untuk Kepolisian Resor Kota Besar, pisahkan menjadi 3 layanan
-            if ($instansi->nama_instansi === 'Kepolisian Resor Kota Besar') {
-                // Ambil layanan Kepolisian
-                $kepolisianServices = DB::table('services')
-                    ->where('instansi_id', $instansi->instansi_id)
-                    ->whereIn('name', ['Layanan SIM', 'Layanan SKCK', 'Layanan ETLE'])
-                    ->get();
+        foreach ($services->groupBy('instansi_id') as $institutionServices) {
+            $institution = $institutionServices->first();
+            $institutionTotals = $dates->map(function (int $day) use ($institutionServices, $dailyCounts, $from): int {
+                $date = $from->copy()->day($day)->toDateString();
 
-                foreach ($kepolisianServices as $service) {
-                    $row = [
-                        'No' => $no,
-                        'Jenis_Instansi' => $service->name
-                    ];
+                return (int) $institutionServices->sum(fn ($service) => (int) ($dailyCounts->get($service->id)?->get($date, 0) ?? 0));
+            });
 
-                    // Hitung jumlah pemohon per tanggal (1-31) untuk layanan spesifik
-                    foreach ($dates as $day) {
-                        $year = $from->year;
-                        $month = $from->month;
-                        $checkDate = Carbon::create($year, $month, $day);
-                        
-                        // Cek apakah tanggal tersebut ada dalam range yang dipilih
-                        if ($checkDate->gte($from) && $checkDate->lte($to)) {
-                            $dateStart = $checkDate->copy()->startOfDay();
-                            $dateEnd = $checkDate->copy()->endOfDay();
-                            
-                            // Hitung antrian untuk layanan spesifik
-                            $jumlahPemohon = DB::table('queues as q')
-                                ->where('q.service_id', $service->id)
-                                ->whereBetween('q.created_at', [$dateStart, $dateEnd])
-                                ->count();
-                        } else {
-                            $jumlahPemohon = 0;
-                        }
+            $rows->push(array_merge(['', $institution->nama_instansi], $institutionTotals->all()));
+            $this->institutionHeaderRows[] = 5 + $rowIndex;
+            $rowIndex++;
 
-                        $row['Tanggal_' . $day] = $jumlahPemohon;
-                    }
+            foreach ($institutionServices as $service) {
+                $serviceTotals = $dates->map(function (int $day) use ($dailyCounts, $service, $from): int {
+                    $date = $from->copy()->day($day)->toDateString();
 
-                    $data->push($row);
-                    $no++;
-                }
-            } else {
-                // Untuk instansi lain, tetap seperti biasa
-                $row = [
-                    'No' => $no,
-                    'Jenis_Instansi' => $instansi->nama_instansi
-                ];
+                    return (int) ($dailyCounts->get($service->id)?->get($date, 0) ?? 0);
+                });
 
-                // Hitung jumlah pemohon per tanggal (1-31)
-                foreach ($dates as $day) {
-                    // Buat tanggal berdasarkan bulan dan tahun dari range yang dipilih
-                    $year = $from->year;
-                    $month = $from->month;
-                    $checkDate = Carbon::create($year, $month, $day);
-                    
-                    // Cek apakah tanggal tersebut ada dalam range yang dipilih
-                    if ($checkDate->gte($from) && $checkDate->lte($to)) {
-                        $dateStart = $checkDate->copy()->startOfDay();
-                        $dateEnd = $checkDate->copy()->endOfDay();
-                        
-                        // Query yang diperbaiki untuk menghitung jumlah antrian per instansi per tanggal
-                        $jumlahPemohon = DB::table('queues as q')
-                            ->join('services as s', 'q.service_id', '=', 's.id')
-                            ->where('s.instansi_id', $instansi->instansi_id)
-                            ->whereBetween('q.created_at', [$dateStart, $dateEnd])
-                            ->count();
-                    } else {
-                        $jumlahPemohon = 0; // Jika tanggal di luar range, set 0
-                    }
-
-                    $row['Tanggal_' . $day] = $jumlahPemohon;
-                }
-
-                $data->push($row);
-                $no++;
+                $rows->push(array_merge(['', '↳ '.$service->prefix.' — '.$service->service_name], $serviceTotals->all()));
+                $rowIndex++;
             }
         }
 
-        return $data;
+        return $rows;
     }
-
 
     public function title(): string
     {
@@ -138,80 +88,51 @@ class RekapLayananExport implements FromCollection, ShouldAutoSize, WithTitle, W
     public function registerEvents(): array
     {
         return [
-            AfterSheet::class => function(AfterSheet $event) {
+            AfterSheet::class => function (AfterSheet $event): void {
                 $sheet = $event->sheet->getDelegate();
-                
-                $from = now()->parse($this->from)->startOfDay();
-                $to   = now()->parse($this->to)->endOfDay();
-                
-                // Selalu tampilkan 31 kolom tanggal (1-31)
-                $dateCount = 31;
-                
-                // Kolom terakhir untuk data tanggal (C + 31 - 1 = AG)
-                $lastDateColumnIndex = 2 + $dateCount; // C (index 2) + 31 - 1 = 33 (AG)
-                $lastColumnLetter = Coordinate::stringFromColumnIndex($lastDateColumnIndex);
-                
-                // 1. Sisipkan 4 baris di awal untuk judul dan header
+                $from = Carbon::parse($this->from)->startOfDay();
+                $lastColumn = Coordinate::stringFromColumnIndex(33);
+
                 $sheet->insertNewRowBefore(1, 4);
-                
-                // 2. Tambahkan judul utama di baris 1
-                $sheet->setCellValue('A1', 'Rekapan Jumlah Pemohon Mall Pelayanan Publik Kota Surabaya');
-                $sheet->mergeCells('A1:' . $lastColumnLetter . '1');
-                $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
-                $sheet->getStyle('A1')->getAlignment()->setHorizontal('center');
-                
-                // 3. Tambahkan subtitle di baris 2
-                $sheet->setCellValue('A2', 'Bulan ' . $from->format('F Y'));
-                $sheet->mergeCells('A2:' . $lastColumnLetter . '2');
-                $sheet->getStyle('A2')->getFont()->setBold(true)->setSize(14);
-                $sheet->getStyle('A2')->getAlignment()->setHorizontal('center');
-                
-                // 4. Header baris 3: No., Jenis Instansi (merged 2 baris), Tanggal (merged)
+                $sheet->removeRow(5, 1);
+
+                $sheet->setCellValue('A1', 'Rekap Jumlah Pemohon Mall Pelayanan Publik Kota Surabaya');
+                $sheet->mergeCells("A1:{$lastColumn}1");
+                $sheet->setCellValue('A2', 'Periode '.$from->format('d F Y').' s.d. '.Carbon::parse($this->to)->format('d F Y'));
+                $sheet->mergeCells("A2:{$lastColumn}2");
                 $sheet->setCellValue('A3', 'No.');
-                $sheet->mergeCells('A3:A4'); // Merge No. untuk 2 baris
-                $sheet->setCellValue('B3', 'Jenis Instansi');
-                $sheet->mergeCells('B3:B4'); // Merge Jenis Instansi untuk 2 baris
-                if ($dateCount > 0) {
-                    $sheet->setCellValue('C3', 'Tanggal');
-                    $sheet->mergeCells('C3:' . $lastColumnLetter . '3');
-                    $sheet->getStyle('C3:' . $lastColumnLetter . '3')->getAlignment()->setHorizontal('center');
+                $sheet->mergeCells('A3:A4');
+                $sheet->setCellValue('B3', 'Instansi / Layanan');
+                $sheet->mergeCells('B3:B4');
+                $sheet->setCellValue('C3', 'Tanggal');
+                $sheet->mergeCells("C3:{$lastColumn}3");
+
+                foreach (range(1, 31) as $day) {
+                    $sheet->setCellValue(Coordinate::stringFromColumnIndex($day + 2).'4', $day);
                 }
-                
-                // 5. Header baris 4: Angka tanggal (1-31)
-                $colIndex = 3; // Mulai dari kolom C
-                for ($day = 1; $day <= 31; $day++) {
-                    $sheet->setCellValue(Coordinate::stringFromColumnIndex($colIndex) . '4', $day);
-                    $colIndex++;
-                }
-                
-                // Styling untuk header tabel (baris 3 dan 4)
-                $headerRange = 'A3:' . $lastColumnLetter . '4';
-                $sheet->getStyle($headerRange)->getFont()->setBold(true);
-                $sheet->getStyle($headerRange)->getFill()
-                    ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-                    ->getStartColor()->setARGB('FFE0E0E0'); // Light gray background
-                $sheet->getStyle($headerRange)->getAlignment()->setHorizontal('center');
-                $sheet->getStyle($headerRange)->getAlignment()->setVertical('center');
-                
-                // Alignment khusus untuk kolom No. dan Jenis Instansi (merged cells)
-                $sheet->getStyle('A3')->getAlignment()->setHorizontal('center'); // No. center aligned
-                $sheet->getStyle('B3')->getAlignment()->setHorizontal('center'); // Jenis Instansi center aligned
-                
-                // Center-align the entire No. column (A) including data rows
+
+                $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
+                $sheet->getStyle('A2')->getFont()->setItalic(true)->setSize(11);
+                $sheet->getStyle("A1:{$lastColumn}2")->getAlignment()->setHorizontal('center');
+                $sheet->getStyle("A3:{$lastColumn}4")->getFont()->setBold(true);
+                $sheet->getStyle("A3:{$lastColumn}4")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFDCE6F1');
+                $sheet->getStyle("A3:{$lastColumn}4")->getAlignment()->setHorizontal('center')->setVertical('center');
+
                 $lastRow = $sheet->getHighestRow();
-                $sheet->getStyle('A3:A' . $lastRow)->getAlignment()->setHorizontal('center');
-                
-                // Set lebar kolom
-                $sheet->getColumnDimension('A')->setWidth(8); // Kolom No. 
-                $sheet->getColumnDimension('B')->setWidth(50); // Kolom Jenis Instansi
-                for ($col = 3; $col <= $lastDateColumnIndex; $col++) {
-                    $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($col))->setWidth(6); // Kolom tanggal
+                $sheet->getStyle("A3:{$lastColumn}{$lastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+                $sheet->getStyle("A5:A{$lastRow}")->getAlignment()->setHorizontal('center');
+                $sheet->getStyle("C5:{$lastColumn}{$lastRow}")->getAlignment()->setHorizontal('center');
+                $sheet->getColumnDimension('A')->setWidth(8);
+                $sheet->getColumnDimension('B')->setWidth(58);
+
+                foreach (range(3, 33) as $column) {
+                    $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($column))->setWidth(6);
                 }
-                
-                // Tambahkan border ke seluruh tabel
-                $lastRow = $sheet->getHighestRow();
-                $sheet->getStyle('A3:' . $lastColumnLetter . $lastRow)->getBorders()->getAllBorders()
-                    ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+
+                foreach ($this->institutionHeaderRows as $row) {
+                    $sheet->getStyle("A{$row}:{$lastColumn}{$row}")->getFont()->setBold(true);
+                    $sheet->getStyle("A{$row}:{$lastColumn}{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFD9EAF7');
+                }
             },
         ];
     }

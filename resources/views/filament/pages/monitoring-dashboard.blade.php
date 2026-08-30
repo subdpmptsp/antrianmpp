@@ -57,16 +57,30 @@
         <table class="w-full border">
             <thead class="bg-gray-100">
                 <tr>
-                    <th class="border p-2 text-left">Jenis Instansi</th>
+                    <th class="border p-2 text-left">Instansi / Layanan</th>
                     <th class="border p-2 text-center">Jumlah Pemohon</th>
                 </tr>
             </thead>
             <tbody>
             @foreach($this->getRekapJumlahPemohon() as $instansi)
-                <tr class="bg-white-100 hover:bg-gray-50">
-                    <td class="border px-4 py-2 text-left font-medium">{{ $instansi->name }}</td>
-                    <td class="border px-4 py-2 text-center font-bold text-blue-600">{{ $instansi->total_pemohon }}</td>
+                @php $isExpanded = in_array($instansi->instansi_id, $expandedInstansiIds, true); @endphp
+                <tr wire:click="toggleInstansi({{ $instansi->instansi_id }})" class="cursor-pointer bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40">
+                    <td class="border px-4 py-3 text-left font-bold text-blue-900 dark:text-blue-100 uppercase">
+                        {{ $instansi->nama_instansi }}
+                        <span class="ml-2 text-xs font-medium normal-case text-blue-600 dark:text-blue-300">{{ $isExpanded ? 'Sembunyikan layanan' : $instansi->services->count().' layanan' }}</span>
+                    </td>
+                    <td class="border px-4 py-3 text-center font-bold text-blue-700 dark:text-blue-200">Total: {{ $instansi->total_pemohon }}</td>
                 </tr>
+                @if($isExpanded)
+                    @foreach($instansi->services as $service)
+                        <tr class="bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700">
+                            <td class="border px-4 py-2 pl-8 text-left text-gray-700 dark:text-gray-200">
+                                <span class="mr-2 text-blue-500">↳</span>{{ $service->prefix }} — {{ $service->name }}
+                            </td>
+                            <td class="border px-4 py-2 text-center font-semibold text-gray-700 dark:text-gray-200">{{ $service->total_pemohon }}</td>
+                        </tr>
+                    @endforeach
+                @endif
             @endforeach
             </tbody>
         </table>

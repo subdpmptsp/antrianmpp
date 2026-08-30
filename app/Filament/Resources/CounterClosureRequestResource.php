@@ -59,6 +59,14 @@ class CounterClosureRequestResource extends Resource
                 Tables\Columns\TextColumn::make('reason')
                     ->label('Alasan')
                     ->wrap(),
+                Tables\Columns\TextColumn::make('auto_reopen')
+                    ->label('Pembukaan Kembali')
+                    ->formatStateUsing(fn (bool $state): string => $state
+                        ? 'Otomatis hari kerja berikutnya, 00.05'
+                        : 'Manual oleh petugas/admin')
+                    ->badge()
+                    ->color(fn (bool $state): string => $state ? 'info' : 'gray')
+                    ->wrap(),
                 Tables\Columns\TextColumn::make('status')
                     ->label('Status')
                     ->badge()
@@ -91,6 +99,8 @@ class CounterClosureRequestResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('reopenedBy.name')
                     ->label('Dibuka Oleh')
+                    ->formatStateUsing(fn (?string $state, CounterClosureRequest $record): string => $state
+                        ?? ($record->reopened_at ? 'Sistem otomatis' : '-'))
                     ->placeholder('-')
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('reopened_at')

@@ -4,7 +4,9 @@ namespace App\Models;
 
 use App\Models\Concerns\InvalidatesMasterDataCache;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
 class Counter extends Model
@@ -40,6 +42,27 @@ class Counter extends Model
         return $this->belongsTo(Service::class, 'service_id');
     }
 
+    /**
+     * Layanan bantuan yang boleh dipanggil dari loket ini. Layanan utama
+     * tetap disimpan pada service_id agar struktur lama tetap kompatibel.
+     */
+    public function additionalServices(): BelongsToMany
+    {
+        return $this->belongsToMany(Service::class, 'counter_service')->withTimestamps();
+    }
+
+    /** @return Collection<int, int> */
+    public function callableServiceIds(): Collection
+    {
+        return $this->additionalServices()
+            ->pluck('services.id')
+            ->push($this->service_id)
+            ->filter()
+            ->map(fn ($serviceId): int => (int) $serviceId)
+            ->unique()
+            ->values();
+    }
+
     public function instansis()
     {
         return $this->hasMany(Instansi::class, 'counter_id', 'id');
@@ -55,6 +78,11 @@ class Counter extends Model
     public function queues()
     {
         return $this->hasMany(Queue::class, 'counter_id');
+    }
+
+    public function closureRequests()
+    {
+        return $this->hasMany(CounterClosureRequest::class);
     }
 
     // Queue yang aktif (sedang dilayani atau dipanggil)

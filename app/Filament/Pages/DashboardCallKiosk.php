@@ -43,8 +43,10 @@ class DashboardCallKiosk extends Page
     public $counters; // Akan menampung semua loket untuk navigasi
 
     public ?int $selectedCounterId = null; // ID dari loket yang sedang dipilih
+    public ?int $selectedServiceId = null;
     public ?string $selectedZone = null;
     public ?string $closeReason = null;
+    public bool $autoReopenCounter = true;
 
     /**
      * Method `mount` dijalankan sekali saat komponen pertama kali dimuat.
@@ -77,6 +79,7 @@ class DashboardCallKiosk extends Page
             if ($counter) {
                 $this->counters = collect([$counter]);
                 $this->selectedCounterId = $counter->id; // Pastikan menggunakan counter->id, bukan user->counter_id
+                $this->selectedServiceId = $counter->service_id;
                 $this->selectedZone = $counter->name;
 
                 // Log untuk debugging
@@ -112,6 +115,7 @@ class DashboardCallKiosk extends Page
                 ->get();
             if ($this->counters->isNotEmpty()) {
                 $this->selectedCounterId = $this->counters->first()->id;
+                $this->selectedServiceId = $this->counters->first()->service_id;
                 $this->selectedZone = $this->counters->first()->name;
             }
         }
@@ -238,6 +242,7 @@ class DashboardCallKiosk extends Page
         }
 
         $counter = $query->find($counterId);
+        $this->selectedServiceId = $counter?->service_id;
         Log::debug('Counter selected', [
             'counter_id' => $counterId,
             'counter_name' => $counter?->display_name,
@@ -265,7 +270,19 @@ class DashboardCallKiosk extends Page
         $firstVisibleCounter = $this->visibleCounters->first();
         if ($firstVisibleCounter) {
             $this->selectedCounterId = $firstVisibleCounter->id;
+            $this->selectedServiceId = $firstVisibleCounter->service_id;
         }
+    }
+
+    public function selectServiceTab(int $serviceId): void
+    {
+        $counter = $this->selectedCounter;
+
+        if (! $counter || ! $counter->callableServiceIds()->contains($serviceId)) {
+            return;
+        }
+
+        $this->selectedServiceId = $serviceId;
     }
 
     public function callNext(QueueService $queueService)
@@ -297,21 +314,10 @@ class DashboardCallKiosk extends Page
         $nextQueue = null;
 
         // Kumpulkan semua service_id yang terkait dengan counter ini
-        $serviceIds = [];
+        $activeServiceId = $this->selectedServiceId ?? $this->selectedCounter->service_id;
+        $serviceIds = array_filter([$activeServiceId]);
 
         // 1. Cek service_id langsung dari counter
-        if ($this->selectedCounter->service_id) {
-            $serviceIds[] = $this->selectedCounter->service_id;
-        }
-
-        // Relasi resmi: setiap loket memilih satu layanan melalui counters.service_id.
-        if ($this->selectedCounter->service && ! in_array($this->selectedCounter->service->id, $serviceIds)) {
-            $serviceIds[] = $this->selectedCounter->service->id;
-        }
-
-        // Hapus fallback berdasarkan prefix dan instansi_id yang terlalu luas
-        // Ini menyebabkan semua antrian di zona yang sama muncul
-
         // Kumpulkan semua service yang ditemukan untuk logging
         $allServicesFound = [];
         if (! empty($serviceIds)) {
@@ -376,7 +382,7 @@ class DashboardCallKiosk extends Page
             ]);
         }
 
-        $nextQueue = $queueService->callNextQueue($this->selectedCounter->id);
+        $nextQueue = $queueService->callNextQueue($this->selectedCounter->id, $activeServiceId);
 
         if ($nextQueue) {
             Log::debug('Found next queue', [
@@ -545,8 +551,14 @@ class DashboardCallKiosk extends Page
         $this->resetErrorBag('closeReason');
 
         try {
-            $closureService->requestClose($this->selectedCounter, Auth::user(), (string) $this->closeReason);
+            $closureService->requestClose(
+                $this->selectedCounter,
+                Auth::user(),
+                (string) $this->closeReason,
+                $this->autoReopenCounter,
+            );
             $this->closeReason = null;
+            $this->autoReopenCounter = true;
             $this->dispatch('notify', [
                 'type' => 'success',
                 'message' => 'Permintaan tutup loket sudah dikirim dan menunggu persetujuan admin.',
@@ -587,10 +599,40 @@ class DashboardCallKiosk extends Page
             'total' => 0, 'finished' => 0, 'waiting' => 0, 'cancelled' => 0,
         ];
         $audioConfig = app(AudioConfigurationService::class)->get();
+        $callableServices = collect();
+        $activeService = null;
 
         // Hanya ambil data jika ada loket yang dipilih
         if ($this->selectedCounter) {
             $counter = $this->selectedCounter; // Ambil dari computed property
+
+            $callableServices = $counter->additionalServices()
+                ->where('services.is_active', true)
+                ->orderBy('services.prefix')
+                ->get()
+                ->push($counter->service)
+                ->filter()
+                ->unique('id')
+                ->sortBy('prefix')
+                ->values();
+
+            $activeService = $callableServices->firstWhere('id', $this->selectedServiceId)
+                ?? $callableServices->first();
+            $this->selectedServiceId = $activeService?->id;
+
+            $waitingCounts = Queue::query()
+                ->whereIn('service_id', $callableServices->pluck('id'))
+                ->where('status', Queue::STATUS_WAITING)
+                ->whereNull('called_at')
+                ->whereDate('created_at', today())
+                ->selectRaw('service_id, COUNT(*) as total')
+                ->groupBy('service_id')
+                ->pluck('total', 'service_id');
+
+            $callableServices->each(fn (Service $service) => $service->setAttribute(
+                'waiting_count',
+                (int) ($waitingCounts[$service->id] ?? 0),
+            ));
 
             // Cari antrian yang sedang dipanggil atau dilayani di loket ini
             // Prioritas: cari yang sedang serving, lalu yang called (dipanggil)
@@ -602,21 +644,9 @@ class DashboardCallKiosk extends Page
 
             // Kumpulkan semua service ID yang terkait dengan counter ini
             // Hanya ambil service yang benar-benar terkait dengan counter, bukan semua service di zona
-            $serviceIds = [];
+            $serviceIds = array_filter([$this->selectedServiceId]);
 
             // 1. Cek service_id langsung dari counter
-            if ($counter->service_id) {
-                $serviceIds[] = $counter->service_id;
-            }
-
-            // Relasi resmi: setiap loket memilih satu layanan melalui counters.service_id.
-            if ($counter->service && ! in_array($counter->service->id, $serviceIds)) {
-                $serviceIds[] = $counter->service->id;
-            }
-
-            // Hapus fallback berdasarkan prefix dan instansi_id yang terlalu luas
-            // Ini menyebabkan semua antrian di zona yang sama muncul
-
             // Jika tidak ada service_id, gunakan counter_id sebagai fallback
             if (empty($serviceIds)) {
                 $waitingQueues = Queue::where('counter_id', $counter->id)
@@ -650,6 +680,8 @@ class DashboardCallKiosk extends Page
             'currentQueue' => $currentQueue,
             'waitingQueues' => $waitingQueues,
             'stats' => $stats,
+            'callableServices' => $callableServices,
+            'activeService' => $activeService,
             'announcementOpeningAudioUrl' => $audioConfig['url'] ?? asset(config('audio.fallback.url', 'sounds/opening.mp3')),
         ];
     }

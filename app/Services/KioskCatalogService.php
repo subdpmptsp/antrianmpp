@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Counter;
 use App\Models\Instansi;
+use App\Models\Queue;
+use App\Models\Service;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -116,6 +118,53 @@ class KioskCatalogService
                 ->reject(fn (Instansi $instansi): bool => $popularIds->contains($instansi->instansi_id))
                 ->values(),
         ];
+    }
+
+    /**
+     * Tambahkan informasi antrean hanya untuk dua loket Konsultasi
+     * Kependudukan Dispendukcapil agar pemohon dapat memilih loket yang sepi.
+     *
+     * @param Collection<int, Service> $services
+     * @return Collection<int, Service>
+     */
+    public function withDisdukcapilConsultationQueueCounts(Collection $services): Collection
+    {
+        $consultationServices = $services
+            ->filter(fn (Service $service): bool => in_array($service->prefix, ['3C-6', '3C-7'], true));
+
+        if ($consultationServices->isEmpty()) {
+            return $services;
+        }
+
+        $counts = Queue::query()
+            ->whereIn('service_id', $consultationServices->pluck('id'))
+            ->whereDate('created_at', today())
+            ->whereIn('status', [
+                Queue::STATUS_PRINTING,
+                Queue::STATUS_WAITING,
+                Queue::STATUS_CALLED,
+                Queue::STATUS_SERVING,
+            ])
+            ->selectRaw('service_id, COUNT(*) as total')
+            ->groupBy('service_id')
+            ->pluck('total', 'service_id');
+
+        $minimumCount = $consultationServices
+            ->map(fn (Service $service): int => (int) ($counts[$service->id] ?? 0))
+            ->min();
+
+        return $services->map(function (Service $service) use ($counts, $minimumCount): Service {
+            $isConsultationCounter = in_array($service->prefix, ['3C-6', '3C-7'], true);
+
+            $service->setAttribute('is_disdukcapil_consultation_counter', $isConsultationCounter);
+            $service->setAttribute('active_queue_count', $isConsultationCounter
+                ? (int) ($counts[$service->id] ?? 0)
+                : null);
+            $service->setAttribute('is_recommended_consultation_counter', $isConsultationCounter
+                && (int) ($counts[$service->id] ?? 0) === $minimumCount);
+
+            return $service;
+        });
     }
 
     private function resolveCounter(array $zone, Collection $counters): ?Counter

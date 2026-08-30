@@ -48,6 +48,8 @@ class PublicQueueKioskController extends Controller
             )
             : collect();
 
+        $services = $this->catalog->withDisdukcapilConsultationQueueCounts($services);
+
         return view('public.queue-kiosk', [
             'selectedInstansi' => $selectedInstansi,
             'instansis' => $instansis,

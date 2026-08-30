@@ -166,7 +166,7 @@
         const onlineText = root.querySelector('[data-kiosk-online-text]')
         const updateClock = () => {
             const now = new Date()
-            if (clock) clock.textContent = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }).replace('.', ':')
+            if (clock) clock.textContent = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace('.', ':')
             if (date) date.textContent = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })
         }
         const updateConnection = () => {

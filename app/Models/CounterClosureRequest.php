@@ -16,6 +16,7 @@ class CounterClosureRequest extends Model
         'service_id',
         'requested_by_user_id',
         'reason',
+        'auto_reopen',
         'status',
         'admin_note',
         'reviewed_by_user_id',
@@ -28,6 +29,7 @@ class CounterClosureRequest extends Model
     protected function casts(): array
     {
         return [
+            'auto_reopen' => 'boolean',
             'requested_at' => 'datetime',
             'reviewed_at' => 'datetime',
             'reopened_at' => 'datetime',

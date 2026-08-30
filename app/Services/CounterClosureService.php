@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 
 class CounterClosureService
 {
-    public function requestClose(Counter $counter, User $user, string $reason): CounterClosureRequest
+    public function requestClose(Counter $counter, User $user, string $reason, bool $autoReopen = true): CounterClosureRequest
     {
         if ((int) $user->counter_id !== (int) $counter->id && ! $user->isAdmin()) {
             throw ValidationException::withMessages(['reason' => 'Anda hanya dapat mengajukan penutupan loket yang ditugaskan kepada Anda.']);
@@ -26,7 +26,7 @@ class CounterClosureService
             throw ValidationException::withMessages(['reason' => 'Alasan penutupan loket wajib diisi, maksimal 1.000 karakter.']);
         }
 
-        return DB::transaction(function () use ($counter, $user, $reason): CounterClosureRequest {
+        return DB::transaction(function () use ($counter, $user, $reason, $autoReopen): CounterClosureRequest {
             $hasPendingRequest = CounterClosureRequest::query()
                 ->where('counter_id', $counter->id)
                 ->where('status', CounterClosureRequest::STATUS_PENDING)
@@ -42,6 +42,7 @@ class CounterClosureService
                 'service_id' => $counter->service_id,
                 'requested_by_user_id' => $user->id,
                 'reason' => $reason,
+                'auto_reopen' => $autoReopen,
                 'status' => CounterClosureRequest::STATUS_PENDING,
                 'requested_at' => now(),
             ]);
@@ -59,13 +60,14 @@ class CounterClosureService
                 throw ValidationException::withMessages(['status' => 'Permintaan ini sudah ditinjau.']);
             }
 
-            $request->service()->update(['is_accepting_queues' => false]);
             $request->update([
                 'status' => CounterClosureRequest::STATUS_APPROVED,
                 'admin_note' => $note,
                 'reviewed_by_user_id' => $admin->id,
                 'reviewed_at' => now(),
             ]);
+
+            $this->syncServiceQueueAvailability($request->service_id);
         });
 
         app(MasterDataCache::class)->invalidate();
@@ -105,15 +107,49 @@ class CounterClosureService
                 throw ValidationException::withMessages(['counter' => 'Tidak ada penutupan loket yang dapat dibuka kembali.']);
             }
 
-            $counter->service()->update(['is_accepting_queues' => true]);
             $request->update([
                 'status' => CounterClosureRequest::STATUS_REOPENED,
                 'reopened_by_user_id' => $user->id,
                 'reopened_at' => now(),
             ]);
+
+            $this->syncServiceQueueAvailability($counter->service_id);
         });
 
         app(MasterDataCache::class)->invalidate();
+    }
+
+    /**
+     * Membuka kembali loket yang sebelumnya disetujui tutup oleh sistem.
+     * Hanya dipanggil oleh perintah terjadwal pada hari operasional.
+     */
+    public function reopenAutomatically(CounterClosureRequest $closureRequest): bool
+    {
+        $reopened = DB::transaction(function () use ($closureRequest): bool {
+            $request = CounterClosureRequest::query()->lockForUpdate()->findOrFail($closureRequest->id);
+
+            if ($request->status !== CounterClosureRequest::STATUS_APPROVED || ! $request->auto_reopen) {
+                return false;
+            }
+
+            $counter = Counter::withoutGlobalScopes()->findOrFail($request->counter_id);
+
+            $request->update([
+                'status' => CounterClosureRequest::STATUS_REOPENED,
+                'reopened_by_user_id' => null,
+                'reopened_at' => now(),
+            ]);
+
+            $this->syncServiceQueueAvailability($counter->service_id);
+
+            return true;
+        });
+
+        if ($reopened) {
+            app(MasterDataCache::class)->invalidate();
+        }
+
+        return $reopened;
     }
 
     private function ensureAdmin(User $user): void
@@ -121,5 +157,28 @@ class CounterClosureService
         if (! $user->isAdmin()) {
             abort(403);
         }
+    }
+
+    /**
+     * Layanan hanya berhenti menerima nomor baru jika seluruh loket aktifnya
+     * telah disetujui tutup. Loket yang sedang menangani antrean tetap dapat
+     * memanggil dan menyelesaikan antrean yang sudah masuk.
+     */
+    private function syncServiceQueueAvailability(int $serviceId): void
+    {
+        $openCounterExists = Counter::withoutGlobalScopes()
+            ->where('service_id', $serviceId)
+            ->where('is_active', true)
+            ->whereDoesntHave('closureRequests', function ($query): void {
+                $query->where('status', CounterClosureRequest::STATUS_APPROVED);
+            })
+            ->exists();
+
+        DB::table('services')
+            ->where('id', $serviceId)
+            ->update([
+                'is_accepting_queues' => $openCounterExists,
+                'updated_at' => now(),
+            ]);
     }
 }

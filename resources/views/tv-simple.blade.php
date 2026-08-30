@@ -101,15 +101,30 @@
             justify-content: center;
             animation: fadeIn 0.5s ease-in;
         }
+
+        .announcement-overlay.hidden {
+            display: none !important;
+        }
         
         .announcement-card {
+            width: min(80vw, 1600px);
+            min-height: min(80vh, 900px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             background: white;
             border-radius: 2rem;
             padding: 3rem;
             text-align: center;
             box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
-            animation: slideIn 0.5s ease-out;
+            animation: slideIn 0.5s ease-out, announcementGlow 2.6s ease-in-out 0.5s infinite;
         }
+
+        #announcement-number { font-size: clamp(6rem, 14vw, 14rem); line-height: 1; }
+        #announcement-service { font-size: clamp(2.25rem, 5vw, 5.5rem); line-height: 1.1; }
+        #announcement-counter { font-size: clamp(1.5rem, 3vw, 3.25rem); }
+        #announcement-time { font-size: clamp(1.25rem, 2.2vw, 2.5rem); }
         
         @keyframes fadeIn {
             from { opacity: 0; }
@@ -125,6 +140,11 @@
                 opacity: 1;
                 transform: translateY(0);
             }
+        }
+
+        @keyframes announcementGlow {
+            0%, 100% { transform: scale(1); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3); }
+            50% { transform: scale(1.018); box-shadow: 0 0 0 14px rgba(96, 165, 250, 0.8), 0 30px 68px rgba(0, 0, 0, 0.42); }
         }
         
         .loading {
@@ -181,10 +201,10 @@
     <!-- Announcement Overlay -->
     <div id="announcement-overlay" class="announcement-overlay hidden">
         <div class="announcement-card">
-            <div class="text-8xl font-black text-blue-600 mb-6" id="announcement-number">A001</div>
-            <div class="text-3xl font-bold text-gray-800 mb-4" id="announcement-service">Pengambilan Izin</div>
-            <div class="text-xl text-gray-600 mb-2" id="announcement-counter">ZONA 1</div>
-            <div class="text-lg text-gray-500" id="announcement-time">10:30:45</div>
+            <div class="text-8xl font-black text-blue-600 mb-6" id="announcement-number">-</div>
+            <div class="text-3xl font-bold text-gray-800 mb-4" id="announcement-service">-</div>
+            <div class="text-xl text-gray-600 mb-2" id="announcement-counter">-</div>
+            <div class="text-lg text-gray-500" id="announcement-time">-</div>
         </div>
     </div>
 
@@ -194,6 +214,7 @@
         let isAnnouncing = false;
         const announcementStorageKey = `tv:last-announcement:${currentZone}`;
         let lastAnnouncementId = sessionStorage.getItem(announcementStorageKey);
+        let announcementPollingInitialized = Boolean(lastAnnouncementId);
 
         function escapeHtml(value) {
             const element = document.createElement('div');
@@ -314,14 +335,35 @@
             
             overlay.classList.remove('hidden');
             
-            // Play audio
-            // Format instansi - UPTSP dieja, yang lain tidak
-            let instansiText = data.zona.toLowerCase();
-            if (data.zona.toUpperCase() === 'UPTSP') {
-                instansiText = 'U-P-T-S-P';
+            // Audio dibuat ringkas: nama instansi Dispendukcapil tidak
+            // disebut karena terlalu panjang. IKD dibaca fonetik agar
+            // suara browser tidak menghilangkan huruf D.
+            const isDisdukcapil = /dinas kependudukan dan pencatatan sipil/i.test(String(data.zona || ''));
+            const serviceNameForSpeech = String(data.serviceName || 'Layanan')
+                .toLowerCase()
+                .replace(/\bikd\b/gi, 'i ka de')
+                .replace(/\byob\b/gi, 'ye o be');
+            const queueNumberForSpeech = String(data.queueNumber || 'nomor tidak diketahui')
+                .replace(/-/g, ', ');
+            const counterName = String(data.counterName || 'Loket');
+            const zoneOneCounter = counterName.match(/^Loket\s+Z1-(\d{2})$/i);
+            const counterNameForSpeech = zoneOneCounter
+                ? `loket ${Number(zoneOneCounter[1])}`
+                : counterName;
+            let instansiText = '';
+
+            if (!isDisdukcapil) {
+                instansiText = data.zona.toUpperCase() === 'UPTSP'
+                    ? 'U-P-T-S-P'
+                    : data.zona.toLowerCase();
             }
-            
-            const announcementText = `nomor antrian ${data.queueNumber}, layanan ${data.serviceName.toLowerCase()}, menuju ke ${data.counterName}, ${instansiText}`;
+
+            const announcementText = [
+                `nomor antrian ${queueNumberForSpeech}`,
+                `layanan ${serviceNameForSpeech}`,
+                `menuju ke ${counterNameForSpeech}`,
+                instansiText,
+            ].filter(Boolean).join(', ');
             
             if (typeof responsiveVoice !== 'undefined') {
                 responsiveVoice.speak(announcementText, 'Indonesian Female', {
@@ -368,8 +410,18 @@
                 if (data && data.announcementId) {
                     lastAnnouncementId = data.announcementId;
                     sessionStorage.setItem(announcementStorageKey, lastAnnouncementId);
+
+                    // Saat TV baru dibuka, catat pengumuman terakhir tanpa
+                    // memutarnya kembali. Hanya panggilan baru yang diputar.
+                    if (!announcementPollingInitialized) {
+                        announcementPollingInitialized = true;
+                        return;
+                    }
+
                     playAnnouncement(data);
                 }
+
+                announcementPollingInitialized = true;
             } catch (error) {
                 console.error('Error checking announcements:', error);
             }

@@ -15,6 +15,12 @@ Schedule::command('attendance:reset-daily')
     ->timezone('Asia/Jakarta')
     ->withoutOverlapping();
 
+// Membuka loket yang disetujui tutup otomatis pada hari operasional berikutnya.
+Schedule::command('counters:auto-reopen')
+    ->dailyAt('00:05')
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping();
+
 Schedule::command('audio:cleanup-generated --days=7')
     ->dailyAt('02:00')
     ->timezone('Asia/Jakarta')

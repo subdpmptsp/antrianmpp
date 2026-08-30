@@ -116,9 +116,9 @@ class QueueService
             ->first();
     }
 
-    public function callNextQueue($counterId)
+    public function callNextQueue($counterId, ?int $serviceId = null)
     {
-        return DB::transaction(function () use ($counterId) {
+        return DB::transaction(function () use ($counterId, $serviceId) {
             $counter = Counter::withoutGlobalScopes()
                 ->whereKey($counterId)
                 ->lockForUpdate()
@@ -136,7 +136,11 @@ class QueueService
                 return null;
             }
 
-            $nextQueue = $this->eligibleWaitingQueues($counter)
+            if ($serviceId !== null && ! $counter->callableServiceIds()->contains($serviceId)) {
+                return null;
+            }
+
+            $nextQueue = $this->eligibleWaitingQueues($counter, $serviceId)
                 ->orderBy('id')
                 ->lockForUpdate()
                 ->first();
@@ -203,9 +207,9 @@ class QueueService
             ->findOrFail($counterId);
     }
 
-    private function eligibleWaitingQueues(Counter $counter): Builder
+    private function eligibleWaitingQueues(Counter $counter, ?int $serviceId = null): Builder
     {
-        $serviceIds = collect([$counter->service_id])
+        $serviceIds = collect([$serviceId ?? $counter->service_id])
             ->filter()
             ->unique()
             ->values();

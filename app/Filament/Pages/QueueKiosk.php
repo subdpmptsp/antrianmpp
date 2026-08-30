@@ -62,11 +62,14 @@ class QueueKiosk extends Page
         }
 
         $this->selectedInstansi = $instansiId;
-        $this->services = Service::query()
+        $services = Service::query()
             ->where('instansi_id', $instansiId)
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
+
+        $this->services = app(KioskCatalogService::class)
+            ->withDisdukcapilConsultationQueueCounts($services);
     }
 
     public function selectService(int $serviceId, QueueService $queueService): void

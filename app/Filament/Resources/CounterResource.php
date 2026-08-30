@@ -7,6 +7,7 @@ use App\Models\Counter;
 use App\Models\Instansi;
 use App\Models\Service;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
@@ -102,6 +103,14 @@ class CounterResource extends Resource
                     ->searchable()
                     ->reactive()
                     ->required(),
+
+                CheckboxList::make('additionalServices')
+                    ->label('Layanan Tambahan yang Dapat Dipanggil')
+                    ->relationship('additionalServices', 'name')
+                    ->getOptionLabelFromRecordUsing(fn (Service $service): string => $service->prefix.' — '.$service->name)
+                    ->columns(1)
+                    ->searchable()
+                    ->helperText('Opsional. Petugas tetap memakai satu akun, lalu dapat memilih layanan ini melalui tab pada halaman pemanggilan. Layanan utama sudah muncul otomatis.'),
 
                 Toggle::make('is_active')
                     ->label('Status Aktif')

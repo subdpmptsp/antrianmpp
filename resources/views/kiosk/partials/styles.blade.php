@@ -98,6 +98,7 @@
     .queue-kiosk__service-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; align-content: start; }
     .queue-kiosk__service-form { display: none; }
     .queue-kiosk__service-card { min-height: 88px; padding: 12px 14px; }
+    .queue-kiosk__recommendation { display: inline-flex; width: fit-content; margin-top: 6px; padding: 3px 7px; color: #0c6b48; font-size: 10px; font-weight: 850; line-height: 1; border-radius: 999px; background: #dff7eb; }
     .queue-kiosk__service-card:disabled, .queue-kiosk__service-card.is-unavailable { color: #6b7280; border-color: #d1d5db; background: #e5e7eb; box-shadow: none; opacity: 1; cursor: not-allowed; pointer-events: none; }
     .queue-kiosk__service-card.is-unavailable .queue-kiosk__service-icon { color: #9ca3af; background: #f3f4f6; }
     .queue-kiosk__service-card.is-unavailable small { color: #6b7280; }
