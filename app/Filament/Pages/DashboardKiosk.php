@@ -18,6 +18,21 @@ class DashboardKiosk extends Page
 
     protected static ?string $navigationGroup = 'Operasional';
 
+    public ?string $selectedZone = null;
+
+    /** Kecepatan gulir daftar antrean dalam piksel per detik. */
+    public int $scrollSpeed = 24;
+
+    public function mount(): void
+    {
+        $zone = request()->string('zone')->toString();
+        $available = collect(config('tv.zones', []))
+            ->pluck('name')
+            ->map(fn ($name): string => (string) $name);
+
+        $this->selectedZone = $available->contains($zone) ? $zone : null;
+    }
+
     public static function canAccess(): bool
     {
         return auth()->user()?->can('access-admin-area') ?? false;
@@ -25,10 +40,20 @@ class DashboardKiosk extends Page
 
     public function getViewData(): array
     {
-        // Refresh counters dengan relasi lengkap untuk sinkronisasi real-time
-        // Pastikan semua counter ditampilkan termasuk ZONA 4 dan ZONA 5
+        $zones = collect(config('tv.zones', []))
+            ->map(fn (array $zone, int $number): array => [
+                'number' => $number,
+                'name' => (string) ($zone['name'] ?? "ZONA {$number}"),
+            ])
+            ->values();
+
+        $selectedZoneIsValid = $zones->contains('name', $this->selectedZone);
+
         $counters = Counter::query()
             ->withoutGlobalScopes()
+            ->where('is_archived', false)
+            ->when($selectedZoneIsValid, fn ($query) => $query->where('name', $this->selectedZone))
+            ->when(! $selectedZoneIsValid, fn ($query) => $query->whereRaw('1 = 0'))
             ->with([
                 'service', 
                 'activeQueue.service', 
@@ -55,6 +80,8 @@ class DashboardKiosk extends Page
             ->get();
 
         return [
+            'zones' => $zones,
+            'selectedZoneIsValid' => $selectedZoneIsValid,
             'counters' => $counters,
             'setting' => Setting::first() ?? (object)[
                 'name' => 'Mall Pelayanan Publik',
@@ -62,6 +89,27 @@ class DashboardKiosk extends Page
                 'image' => null,
             ],
         ];
+    }
+
+    public function selectZone(string $zone): void
+    {
+        $available = collect(config('tv.zones', []))
+            ->pluck('name')
+            ->map(fn ($name): string => (string) $name);
+
+        if ($available->contains($zone)) {
+            $this->selectedZone = $zone;
+        }
+    }
+
+    public function resetZone(): void
+    {
+        $this->selectedZone = null;
+    }
+
+    public function updatedScrollSpeed(int|string $speed): void
+    {
+        $this->scrollSpeed = max(8, min(60, (int) $speed));
     }
 
     /**

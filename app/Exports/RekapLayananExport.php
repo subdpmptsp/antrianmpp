@@ -20,7 +20,11 @@ class RekapLayananExport implements FromCollection, ShouldAutoSize, WithEvents, 
     /** @var array<int, int> */
     private array $institutionHeaderRows = [];
 
-    public function __construct(protected string $from, protected string $to) {}
+    public function __construct(
+        protected string $from,
+        protected string $to,
+        protected ?string $zoneId = null,
+    ) {}
 
     public function headings(): array
     {
@@ -36,6 +40,12 @@ class RekapLayananExport implements FromCollection, ShouldAutoSize, WithEvents, 
         $services = DB::table('services as s')
             ->join('instansis as i', 'i.instansi_id', '=', 's.instansi_id')
             ->where('s.is_active', true)
+            ->where('s.is_archived', false)
+            ->when($this->zoneId && $this->zoneId !== 'all', function ($query): void {
+                $zoneName = (string) config("tv.zones.{$this->zoneId}.name", "ZONA {$this->zoneId}");
+                $counterIds = DB::table('counters')->where('name', $zoneName)->pluck('id');
+                $query->whereIn('i.counter_id', $counterIds);
+            })
             ->select(['s.id', 's.prefix', 's.name as service_name', 'i.instansi_id', 'i.nama_instansi'])
             ->orderBy('i.nama_instansi')
             ->orderBy('s.prefix')

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tiket {{ $queue->number }}</title>
+    <title>{{ $mppBranding['name'] }} — Tiket {{ $queue->number }}</title>
     <style>
         @page { size: 80mm auto; margin: 3mm; }
         * { box-sizing: border-box; }

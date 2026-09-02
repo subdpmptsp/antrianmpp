@@ -3,28 +3,41 @@
 namespace App\Filament\Pages;
 
 use App\Exports\RekapLayananExport;
-use App\Models\Queue;
-use App\Models\Service;
-use App\Models\Instansi;
-use Filament\Actions\Action;
+use App\Models\Counter;
+use App\Services\MonitoringRealtimeService;
+use Carbon\Carbon;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Illuminate\Support\Facades\DB;
-use Livewire\Attributes\On;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Facades\Excel;
 
 class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
 {
     use Forms\Concerns\InteractsWithForms;
 
-    protected static ?string $navigationIcon = 'heroicon-o-document-text';
-
-    protected static ?string $navigationLabel = 'Monitoring Dashboard';
-
+    protected static ?string $navigationIcon = 'heroicon-o-chart-bar-square';
+    protected static ?string $navigationLabel = 'Monitoring';
     protected static ?string $navigationGroup = 'Monitoring';
-
+    protected static ?int $navigationSort = 1;
     protected static string $view = 'filament.pages.monitoring-dashboard';
+
+    public string $activeTab = 'realtime';
+    public ?string $zoneFilter = null;
+    public ?string $reportZoneFilter = null;
+    public ?string $search = null;
+    public ?string $from = null;
+    public ?string $to = null;
+
+    /** @var array<string, mixed> */
+    public array $data = [];
+
+    /** @var array<int, int> */
+    public array $expandedInstansiIds = [];
+
+    public int $lastRefreshedAt = 0;
 
     public static function canAccess(): bool
     {
@@ -36,164 +49,64 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
         return static::canAccess();
     }
 
-    // filter tanggal sederhana
-    public ?string $from = null;
-
-    public ?string $to = null;
-
-    /** @var array<int, int> */
-    public array $expandedInstansiIds = [];
-
     public function mount(): void
     {
         $this->from = now()->toDateString();
         $this->to = now()->toDateString();
+        $this->lastRefreshedAt = now()->timestamp;
+        $this->form->fill(['from' => $this->from, 'to' => $this->to]);
+    }
 
-        $this->form->fill([
-            'from' => $this->from,
-            'to' => $this->to,
-        ]);
+    public function getHeading(): string|Htmlable
+    {
+        return '';
     }
 
     public function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Grid::make(3)->schema([
-                Forms\Components\DatePicker::make('from')
-                    ->label('Dari Tanggal')
-                    ->reactive()
-                    ->afterStateUpdated(fn ($state) => $this->from = $state),
-
-                Forms\Components\DatePicker::make('to')
-                    ->label('Sampai Tanggal')
-                    ->reactive()
-                    ->afterStateUpdated(fn ($state) => $this->to = $state),
-
-                Forms\Components\Placeholder::make('info')
-                    ->content('Pilih tanggal untuk filter & export'),
+            Forms\Components\Grid::make(2)->schema([
+                Forms\Components\DatePicker::make('from')->label('Dari Tanggal')->required(),
+                Forms\Components\DatePicker::make('to')->label('Sampai Tanggal')->required(),
             ]),
-        ])->statePath('data'); // bebas, hanya untuk simpan state form
+        ])->statePath('data');
     }
 
-    /**
-     * Data yang dipakai di Blade (tabel rekap di halaman)
-     */
-    public function getViewData(): array
+    public function selectTab(string $tab): void
     {
-        $from = now()->parse($this->from)->startOfDay();
-        $to = now()->parse($this->to)->endOfDay();
-
-        $rekapan = Service::query()
-            ->withCount([
-                'queues as queues_count' => function ($q) use ($from, $to) {
-                    $q->whereBetween('created_at', [$from, $to]);
-                },
-                'queues as menunggu_count' => function ($q) use ($from, $to) {
-                    $q->where('status', Queue::STATUS_WAITING)->whereBetween('created_at', [$from, $to]);
-                },
-                'queues as dipanggil_count' => function ($q) use ($from, $to) {
-                    $q->where('status', Queue::STATUS_CALLED)->whereBetween('created_at', [$from, $to]);
-                },
-                'queues as dilayani_count' => function ($q) use ($from, $to) {
-                    $q->where('status', Queue::STATUS_SERVING)->whereBetween('created_at', [$from, $to]);
-                },
-                'queues as selesai_count' => function ($q) use ($from, $to) {
-                    $q->where('status', Queue::STATUS_FINISHED)->whereBetween('created_at', [$from, $to]);
-                },
-                'queues as batal_count' => function ($q) use ($from, $to) {
-                    $q->where('status', Queue::STATUS_CANCELED)->whereBetween('created_at', [$from, $to]);
-                },
-            ])
-            ->orderBy('name')
-            ->get();
-
-        return [
-            'rekapan' => $rekapan,
-        ];
+        if (in_array($tab, ['realtime', 'report'], true)) {
+            $this->activeTab = $tab;
+            $this->lastRefreshedAt = now()->timestamp;
+        }
     }
 
-    /**
-     * Tombol-tombol di header page Filament
-     */
-    protected function getHeaderActions(): array
+    public function refreshData(): void
     {
-        return [
-            Action::make('export')
-                ->label('Export Excel')
-                ->icon('heroicon-o-arrow-down-tray')
-                ->color('success')
-                // arahkan ke route export sambil bawa query from & to dari form
-                ->url(fn () => route('export.rekap-layanan', [
-                    'from' => $this->from,
-                    'to' => $this->to,
-                ]), shouldOpenInNewTab: false),
-        ];
+        $this->lastRefreshedAt = now()->timestamp;
     }
 
-    public function getMonitoringRealTime()
+    public function applyReportFilters(): void
     {
-        $today = now()->toDateString();
+        if (! filled($this->reportZoneFilter)) {
+            Notification::make()
+                ->title('Pilih zona terlebih dahulu')
+                ->body('Rekap rinci hanya dimuat untuk zona yang dipilih agar halaman tetap ringan.')
+                ->warning()
+                ->send();
 
-        return Service::withCount([
-            // jumlah antrian menunggu per layanan
-            'queues as menunggu_count' => function ($q) use ($today) {
-                $q->where('status', Queue::STATUS_WAITING)
-                    ->whereDate('created_at', $today);
-            },
-            // jumlah antrian dipanggil per layanan
-            'queues as dipanggil_count' => function ($q) use ($today) {
-                $q->where('status', Queue::STATUS_CALLED)
-                    ->whereDate('created_at', $today);
-            },
-            // jumlah antrian dilayani (sekarang)
-            'queues as dilayani_count' => function ($q) use ($today) {
-                $q->where('status', Queue::STATUS_SERVING)
-                    ->whereDate('created_at', $today);
-            },
-            // Jumlah antrian selesai menggunakan status kanonis.
-            'queues as selesai_count' => function ($q) use ($today) {
-                $q->where('status', Queue::STATUS_FINISHED)
-                    ->whereDate('created_at', $today);
-            },
-            // jumlah antrian batal/lewat
-            'queues as batal_count' => function ($q) use ($today) {
-                $q->where('status', Queue::STATUS_CANCELED)
-                    ->whereDate('created_at', $today);
-            },
-        ])->where('is_active', true)->orderBy('name')->get(['id', 'name']);
-    }
+            return;
+        }
 
-    public function getRekapJumlahPemohon()
-    {
-        $from = now()->parse($this->from)->startOfDay();
-        $to = now()->parse($this->to)->endOfDay();
-
-        return Instansi::query()
-            ->whereHas('services', fn ($query) => $query->where('is_active', true))
-            ->with(['services' => function ($query) use ($from, $to): void {
-                $query->where('is_active', true)
-                    ->withCount([
-                        'queues as total_pemohon' => fn ($queue) => $queue->whereBetween('created_at', [$from, $to]),
-                    ])
-                    ->orderBy('prefix');
-            }])
-            ->orderBy('nama_instansi')
-            ->get()
-            ->map(function (Instansi $instansi) {
-                $instansi->total_pemohon = $instansi->services->sum('total_pemohon');
-
-                return $instansi;
-            });
+        $state = $this->form->getState();
+        $this->from = $state['from'] ?? now()->toDateString();
+        $this->to = $state['to'] ?? now()->toDateString();
+        $this->expandedInstansiIds = [];
     }
 
     public function toggleInstansi(int $instansiId): void
     {
         if (in_array($instansiId, $this->expandedInstansiIds, true)) {
-            $this->expandedInstansiIds = array_values(array_filter(
-                $this->expandedInstansiIds,
-                fn (int $id): bool => $id !== $instansiId,
-            ));
-
+            $this->expandedInstansiIds = array_values(array_filter($this->expandedInstansiIds, fn (int $id): bool => $id !== $instansiId));
             return;
         }
 
@@ -202,16 +115,87 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
 
     public function exportExcel()
     {
+        if (! filled($this->reportZoneFilter)) {
+            Notification::make()
+                ->title('Pilih zona rekap terlebih dahulu')
+                ->body('Pilih satu zona atau opsi Semua Zona sebelum mengekspor data.')
+                ->warning()
+                ->send();
+
+            return null;
+        }
+
         return Excel::download(
-            new RekapLayananExport($this->from, $this->to),
-            'rekap_layanan.xlsx'
+            new RekapLayananExport($this->from, $this->to, $this->reportZoneFilter),
+            'rekap_layanan_'.Carbon::parse($this->from)->format('Y-m-d').'_sd_'.Carbon::parse($this->to)->format('Y-m-d').'.xlsx',
         );
     }
 
-    #[On('refreshMonitoring')]
-    public function refreshMonitoring()
+    public function exportDescription(): string
     {
-        // Method ini akan dipanggil oleh JavaScript untuk refresh data
-        // Livewire akan otomatis refresh komponen
+        $zone = $this->reportZoneFilter && $this->reportZoneFilter !== 'all'
+            ? (string) config("tv.zones.{$this->reportZoneFilter}.name", "ZONA {$this->reportZoneFilter}")
+            : 'seluruh zona';
+
+        return sprintf(
+            'Mengekspor seluruh layanan aktif %s pada rentang %s s.d. %s.',
+            $zone,
+            Carbon::parse($this->from)->translatedFormat('d F Y'),
+            Carbon::parse($this->to)->translatedFormat('d F Y'),
+        );
+    }
+
+    public function getViewData(): array
+    {
+        $monitoring = app(MonitoringRealtimeService::class);
+        $isRealtime = $this->activeTab === 'realtime';
+        $isReport = $this->activeTab === 'report';
+
+        return [
+            'summary' => $isRealtime ? $monitoring->getSummary() : null,
+            'zones' => $isRealtime ? $monitoring->getZones() : collect(),
+            'services' => $isRealtime && filled($this->zoneFilter) ? $monitoring->getServices($this->zoneFilter, $this->search) : collect(),
+            'zoneOptions' => $monitoring->getZoneOptions(),
+            'rekapan' => $isReport && filled($this->reportZoneFilter) ? $this->getRekapJumlahPemohon() : collect(),
+        ];
+    }
+
+    /** @return Collection<int, \App\Models\Instansi> */
+    protected function getRekapJumlahPemohon(): Collection
+    {
+        $from = Carbon::parse($this->from)->startOfDay();
+        $to = Carbon::parse($this->to)->endOfDay();
+
+        return \App\Models\Instansi::query()
+            ->whereIn('counter_id', $this->counterIdsForZone($this->reportZoneFilter))
+            ->whereHas('services', fn ($query) => $query->where('is_active', true)->where('is_archived', false))
+            ->with(['services' => function ($query) use ($from, $to): void {
+                $query->where('is_active', true)->where('is_archived', false)->withCount([
+                    'queues as total_pemohon' => fn ($queue) => $queue->whereBetween('created_at', [$from, $to]),
+                ])->orderBy('prefix');
+            }])
+            ->orderBy('nama_instansi')
+            ->get()
+            ->map(function (\App\Models\Instansi $instansi) {
+                $instansi->total_pemohon = $instansi->services->sum('total_pemohon');
+                return $instansi;
+            });
+    }
+
+    /** @return Collection<int, int> */
+    protected function counterIdsForZone(?string $zoneId): Collection
+    {
+        if (! filled($zoneId)) {
+            return collect();
+        }
+
+        if ($zoneId === 'all') {
+            return Counter::withoutGlobalScopes()
+                ->whereIn('name', collect(config('tv.zones', []))->pluck('name'))
+                ->pluck('id');
+        }
+
+        $zoneName = (string) config("tv.zones.{$zoneId}.name", "ZONA {$zoneId}");
+        return Counter::withoutGlobalScopes()->where('name', $zoneName)->pluck('id');
     }
 }

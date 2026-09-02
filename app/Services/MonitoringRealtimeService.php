@@ -19,6 +19,7 @@ class MonitoringRealtimeService
             ->selectRaw("SUM(CASE WHEN status = '".Queue::STATUS_WAITING."' THEN 1 ELSE 0 END) as menunggu")
             ->selectRaw("SUM(CASE WHEN status = '".Queue::STATUS_SERVING."' THEN 1 ELSE 0 END) as sedang_dilayani")
             ->selectRaw("SUM(CASE WHEN status = '".Queue::STATUS_FINISHED."' THEN 1 ELSE 0 END) as selesai")
+            ->selectRaw("SUM(CASE WHEN status = '".Queue::STATUS_CANCELED."' THEN 1 ELSE 0 END) as batal")
             ->first();
 
         $avgWaitMinutes = $this->getAverageWaitMinutes($today);
@@ -28,6 +29,7 @@ class MonitoringRealtimeService
             'menunggu' => (int) ($counts->menunggu ?? 0),
             'sedang_dilayani' => (int) ($counts->sedang_dilayani ?? 0),
             'selesai' => (int) ($counts->selesai ?? 0),
+            'batal' => (int) ($counts->batal ?? 0),
             'avg_wait_minutes' => $avgWaitMinutes,
         ];
     }
@@ -145,6 +147,7 @@ class MonitoringRealtimeService
                     ->whereDate('created_at', $today),
             ])
             ->where('is_active', true)
+            ->where('is_archived', false)
             ->when(filled($zoneId), function ($q) use ($zoneId): void {
                 $zoneName = (string) config("tv.zones.{$zoneId}.name", "ZONA {$zoneId}");
                 $counterIds = Counter::withoutGlobalScopes()

@@ -63,8 +63,21 @@ class QueueService
     private function createQueue(int $serviceId, string $status): Queue
     {
         return DB::transaction(function () use ($serviceId, $status) {
+            $requestedService = Service::query()->findOrFail($serviceId);
+
+            $alternatingService = $this->lockAlternatingDisdukcapilConsultationService($requestedService);
+
+            if ($alternatingService) {
+                return Queue::create([
+                    'service_id' => $alternatingService->id,
+                    'number' => $this->generateNumberForService($alternatingService),
+                    'status' => $status,
+                ]);
+            }
+
             $service = Service::query()
                 ->where('is_active', true)
+                ->where('is_archived', false)
                 ->where('is_accepting_queues', true)
                 ->lockForUpdate()
                 ->findOrFail($serviceId);
@@ -75,6 +88,7 @@ class QueueService
             $serviceIdsForPrefix = Service::query()
                 ->where('prefix', $service->prefix)
                 ->where('is_active', true)
+                ->where('is_archived', false)
                 ->lockForUpdate()
                 ->pluck('id');
 
@@ -86,6 +100,41 @@ class QueueService
         });
     }
 
+    /**
+     * Loket 3C-6 dan 3C-7 melayani layanan yang sama, tetapi tiket harus
+     * diarahkan bergiliran. Kedua layanan dikunci dengan urutan yang sama agar
+     * sentuhan serentak dari beberapa kiosk tetap menghasilkan urutan 6-7-6-7.
+     */
+    private function lockAlternatingDisdukcapilConsultationService(Service $requestedService): ?Service
+    {
+        if (! in_array($requestedService->prefix, ['3C-6', '3C-7'], true)) {
+            return null;
+        }
+
+        $services = Service::query()
+            ->where('instansi_id', $requestedService->instansi_id)
+            ->whereIn('prefix', ['3C-6', '3C-7'])
+            ->where('is_active', true)
+            ->where('is_archived', false)
+            ->where('is_accepting_queues', true)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        if ($services->count() !== 2 || ! $services->contains('id', $requestedService->id)) {
+            return null;
+        }
+
+        $lastServiceId = Queue::query()
+            ->whereIn('service_id', $services->pluck('id'))
+            ->whereDate('created_at', today())
+            ->latest('id')
+            ->value('service_id');
+
+        return $services->first(fn (Service $service): bool => (int) $service->id !== (int) $lastServiceId)
+            ?? $services->firstWhere('prefix', '3C-6');
+    }
+
     public function generateNumber($serviceId)
     {
         $service = Service::findOrFail($serviceId);
@@ -93,6 +142,7 @@ class QueueService
         $serviceIdsForPrefix = Service::query()
             ->where('prefix', $service->prefix)
             ->where('is_active', true)
+            ->where('is_archived', false)
             ->pluck('id');
 
         return $this->generateNumberForService($service, $serviceIdsForPrefix);

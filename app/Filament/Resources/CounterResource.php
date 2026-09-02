@@ -51,7 +51,9 @@ class CounterResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->with(['instansi', 'service']);
+        return parent::getEloquentQuery()
+            ->where('is_archived', false)
+            ->with(['instansi', 'service']);
     }
 
     public static function form(Form $form): Form
@@ -92,6 +94,7 @@ class CounterResource extends Resource
                         }
 
                         return Service::where('instansi_id', $instansiId)
+                            ->where('is_archived', false)
                             ->orderBy('prefix')
                             ->get()
                             ->mapWithKeys(fn (Service $service): array => [
@@ -111,50 +114,17 @@ class CounterResource extends Resource
                         'name',
                         fn (Builder $query): Builder => $query
                             ->where('is_active', true)
-                            ->with('instansi'),
-                    )
-                    ->searchable()
-                    ->optionsLimit(20)
-                    ->getSearchResultsUsing(function (string $search): array {
-                        $search = trim($search);
-
-                        if (mb_strlen($search) < 2) {
-                            return [];
-                        }
-
-                        return Service::query()
+                            ->where('is_archived', false)
                             ->with('instansi')
-                            ->where('is_active', true)
-                            ->where(function (Builder $query) use ($search): void {
-                                $query
-                                    ->where('name', 'like', "%{$search}%")
-                                    ->orWhere('prefix', 'like', "%{$search}%")
-                                    ->orWhereHas('instansi', fn (Builder $instansiQuery) => $instansiQuery
-                                        ->where('nama_instansi', 'like', "%{$search}%"));
-                            })
-                            ->orderBy('prefix')
-                            ->limit(20)
-                            ->get()
-                            ->mapWithKeys(fn (Service $service): array => [
-                                $service->id => collect([
-                                    $service->prefix.' — '.$service->name,
-                                    $service->instansi?->nama_instansi,
-                                ])->filter()->implode(' · '),
-                            ])
-                            ->all();
-                    })
-                    ->getOptionLabelsUsing(fn (array $values): array => Service::query()
-                        ->with('instansi')
-                        ->whereIn('id', $values)
-                        ->get()
-                        ->mapWithKeys(fn (Service $service): array => [
-                            $service->id => collect([
-                                $service->prefix.' — '.$service->name,
-                                $service->instansi?->nama_instansi,
-                            ])->filter()->implode(' · '),
-                        ])
-                        ->all())
-                    ->helperText('Ketik minimal 2 karakter untuk mencari kode, layanan, atau instansi. Maksimal 20 hasil ditampilkan; layanan utama loket sudah tersedia otomatis.'),
+                            ->orderBy('prefix'),
+                    )
+                    ->searchable(['name', 'prefix'])
+                    ->optionsLimit(20)
+                    ->getOptionLabelFromRecordUsing(fn (Service $service): string => collect([
+                        $service->prefix.' — '.$service->name,
+                        $service->instansi?->nama_instansi,
+                    ])->filter()->implode(' · '))
+                    ->helperText('Ketik nama layanan atau kode untuk mencari. Hasil dimuat saat dicari, maksimal 20 layanan.'),
 
                 Toggle::make('is_active')
                     ->label('Status Aktif')

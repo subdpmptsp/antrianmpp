@@ -12,7 +12,7 @@ class QueueKioskController extends Controller
     public function index()
     {
         // Ambil semua zona (counter) dengan instansinya
-        $counters = Counter::with('instansi')->get();
+        $counters = Counter::with('instansi')->where('is_archived', false)->get();
 
         return view('queue-kiosk.index', compact('counters'));
     }
@@ -28,7 +28,9 @@ class QueueKioskController extends Controller
     public function showServices(Instansi $instansi)
     {
         // Ambil semua layanan dalam instansi
-        $services = Service::where('instansi_id', $instansi->instansi_id)->get();
+        $services = Service::where('instansi_id', $instansi->instansi_id)
+            ->where('is_archived', false)
+            ->get();
 
         return view('queue-kiosk.services', compact('instansi', 'services'));
     }

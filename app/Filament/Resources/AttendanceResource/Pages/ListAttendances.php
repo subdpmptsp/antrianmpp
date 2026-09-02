@@ -33,6 +33,8 @@ class ListAttendances extends Page
 
     public string $todayInstansi = '';
 
+    public string $todayZone = 'all';
+
     public string $historyFrom = '';
 
     public string $historyUntil = '';
@@ -68,6 +70,13 @@ class ListAttendances extends Page
         $now = now();
         $this->currentDate = $now->toDateString();
         $this->lastUpdatedAt = $now->format('H:i');
+    }
+
+    public function selectTodayZone(string $zone): void
+    {
+        $this->todayZone = $zone === 'all' || array_key_exists((int) $zone, config('tv.zones', []))
+            ? $zone
+            : 'all';
     }
 
     public function applyHistoryFilters(): void
@@ -109,6 +118,7 @@ class ListAttendances extends Page
             Carbon::parse($this->currentDate),
             $this->todaySearch,
             $this->todayInstansi !== '' ? (int) $this->todayInstansi : null,
+            $this->todayZone !== 'all' ? $this->todayZone : null,
         );
     }
 

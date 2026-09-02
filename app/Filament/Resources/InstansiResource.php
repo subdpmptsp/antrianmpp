@@ -105,7 +105,12 @@ class InstansiResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->label('Edit')
+                    ->modalHeading('Edit Instansi')
+                    ->modalSubmitActionLabel('Simpan Perubahan')
+                    ->modalCancelActionLabel('Batal')
+                    ->modalWidth('3xl'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -123,8 +128,6 @@ class InstansiResource extends Resource
     {
         return [
             'index' => Pages\ListInstansis::route('/'),
-            'create' => Pages\CreateInstansi::route('/create'),
-            'edit' => Pages\EditInstansi::route('/{record}/edit'),
         ];
     }
 }

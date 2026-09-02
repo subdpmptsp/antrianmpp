@@ -11,13 +11,14 @@ class Service extends Model
 
     protected $table = 'services';
 
-    protected $fillable = ['instansi_id', 'name', 'prefix', 'padding', 'counter_id', 'is_active', 'is_accepting_queues'];
+    protected $fillable = ['instansi_id', 'name', 'prefix', 'padding', 'counter_id', 'is_active', 'is_accepting_queues', 'is_archived'];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
             'is_accepting_queues' => 'boolean',
+            'is_archived' => 'boolean',
             'padding' => 'integer',
         ];
     }

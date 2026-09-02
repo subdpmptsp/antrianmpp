@@ -33,8 +33,9 @@ class TvDisplayController extends Controller
 
         // Get all services with their status
         $services = Service::where('is_active', true)
+            ->where('is_archived', false)
             ->with(['counters' => function ($query) {
-                $query->where('is_active', true);
+                $query->where('is_active', true)->where('is_archived', false);
             }, 'queues' => function ($query) use ($today) {
                 $query->whereDate('created_at', $today)
                     ->whereIn('status', ['waiting', 'called', 'serving'])
@@ -83,6 +84,7 @@ class TvDisplayController extends Controller
 
         // Get available counters
         $availableCounters = Counter::where('is_active', true)
+            ->where('is_archived', false)
             ->whereDoesntHave('queues', function ($query) use ($today) {
                 $query->whereIn('status', ['called', 'serving'])
                     ->whereDate('created_at', $today);
@@ -131,6 +133,7 @@ class TvDisplayController extends Controller
             $query->where('counter_id', $zoneId);
         })
             ->where('is_active', true)
+            ->where('is_archived', false)
             ->with(['instansi'])
             ->get()
             ->map(function ($service) use ($today) {
@@ -152,6 +155,7 @@ class TvDisplayController extends Controller
                 // Count active counters for this service
                 $activeCounters = Counter::where('service_id', $service->id)
                     ->where('is_active', true)
+                    ->where('is_archived', false)
                     ->count();
 
                 return [
@@ -189,6 +193,7 @@ class TvDisplayController extends Controller
                 ->orWhere('name', 'like', $zoneCounter->name.'%');
         })
             ->where('is_active', true)
+            ->where('is_archived', false)
             ->get();
 
         $counterIds = $zoneCounters->pluck('id');

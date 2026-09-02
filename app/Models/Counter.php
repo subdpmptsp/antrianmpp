@@ -19,6 +19,7 @@ class Counter extends Model
         'instansi_id',
         'service_id',
         'is_active',
+        'is_archived',
     ];
 
     protected static function booted()

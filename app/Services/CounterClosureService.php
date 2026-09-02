@@ -169,6 +169,7 @@ class CounterClosureService
         $openCounterExists = Counter::withoutGlobalScopes()
             ->where('service_id', $serviceId)
             ->where('is_active', true)
+            ->where('is_archived', false)
             ->whereDoesntHave('closureRequests', function ($query): void {
                 $query->where('status', CounterClosureRequest::STATUS_APPROVED);
             })

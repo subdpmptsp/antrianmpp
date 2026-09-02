@@ -126,16 +126,6 @@
             </div>
         </div>
 
-        <!-- Audio Enable Notice -->
-        <div id="audioNotice" class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-            <div class="flex items-center">
-                <svg class="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 14.142M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>
-                </svg>
-                <span class="text-yellow-800 font-medium">Klik di mana saja untuk mengaktifkan suara pemanggilan</span>
-            </div>
-        </div>
-
         {{-- Main Content --}}
         @php
             $selectedCounter = $this->selectedCounter;
@@ -608,22 +598,10 @@
                 fallbackAudio: @js($announcementOpeningAudioUrl ?? asset('sounds/opening.mp3')),
             }
 
-            let audioEnabled = false
             let tvHideTimer = null
             let cleanupAnnouncementListener = null
             let serviceTimerTicker = null
             let serviceTimerStartedAt = null
-
-            const hideAudioNotice = () => {
-                const audioNotice = document.getElementById('audioNotice')
-                if (audioNotice) audioNotice.style.display = 'none'
-            }
-
-            const enableAudio = () => {
-                if (audioEnabled) return
-                audioEnabled = true
-                hideAudioNotice()
-            }
 
             const normalizeAnnouncement = (data) => {
                 const digitWords = ['nol', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan']
@@ -743,7 +721,6 @@
             }
 
             const playAnnouncementSound = async (data) => {
-                enableAudio()
                 const announcement = normalizeAnnouncement(data)
 
                 await playOpeningAudio()
@@ -759,11 +736,6 @@
                     return
                 } catch (_) {}
             }
-
-            document.addEventListener('DOMContentLoaded', () => {
-                document.addEventListener('click', enableAudio, { once: true })
-                document.addEventListener('keydown', enableAudio, { once: true })
-            })
 
             document.addEventListener('livewire:initialized', () => {
                 const formatDuration = (totalSeconds) => {
@@ -821,7 +793,6 @@
                 }
             })
 
-            window.enableAudio = enableAudio
         })()
     </script>
 </x-filament-panels::page>

@@ -38,6 +38,15 @@ class QueueResource extends Resource
         return static::canAccess();
     }
 
+    /**
+     * Riwayat tiket tetap dipertahankan di database, tetapi belum diperlukan
+     * sebagai menu operasional karena monitoring sudah menjadi pusat pantauan.
+     */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public static function canCreate(): bool
     {
         return false;

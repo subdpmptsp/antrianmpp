@@ -224,7 +224,7 @@
                                         <span class="queue-kiosk__recommendation">Disarankan</span>
                                     @endif
                                 @else
-                                    <small>{{ $isAcceptingQueues ? 'Sentuh untuk mencetak tiket' : 'Sementara tidak menerima nomor baru' }}</small>
+                                    <small>{{ $isAcceptingQueues ? 'Sentuh untuk mencetak tiket' : 'Layanan ini sudah tutup. Silakan kembali esok hari.' }}</small>
                                 @endif
                             </span>
                             <svg class="queue-kiosk__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>

@@ -49,24 +49,26 @@ class CounterClosureRequestResource extends Resource
                         $record->counter?->name,
                         $record->counter?->instansi?->nama_instansi,
                     ])->filter()->implode(' · '))
-                    ->placeholder('-'),
-                Tables\Columns\TextColumn::make('service.name')
-                    ->label('Layanan')
-                    ->wrap(),
+                    ->placeholder('-')
+                    ->width('22%'),
                 Tables\Columns\TextColumn::make('requestedBy.name')
-                    ->label('Petugas Pengaju')
-                    ->placeholder('-'),
+                    ->label('Pengajuan')
+                    ->description(fn (CounterClosureRequest $record): string => $record->requested_at?->format('d M Y, H:i') ? 'Diajukan '.$record->requested_at->format('d M Y, H:i') : 'Waktu pengajuan belum tercatat')
+                    ->placeholder('-')
+                    ->width('20%'),
                 Tables\Columns\TextColumn::make('reason')
                     ->label('Alasan')
-                    ->wrap(),
+                    ->limit(42)
+                    ->tooltip(fn (CounterClosureRequest $record): string => $record->reason)
+                    ->width('27%'),
                 Tables\Columns\TextColumn::make('auto_reopen')
                     ->label('Pembukaan Kembali')
                     ->formatStateUsing(fn (bool $state): string => $state
-                        ? 'Otomatis hari kerja berikutnya, 00.05'
+                        ? 'Otomatis besok, 00.05'
                         : 'Manual oleh petugas/admin')
                     ->badge()
                     ->color(fn (bool $state): string => $state ? 'info' : 'gray')
-                    ->wrap(),
+                    ->width('16%'),
                 Tables\Columns\TextColumn::make('status')
                     ->label('Status')
                     ->badge()
@@ -83,36 +85,8 @@ class CounterClosureRequestResource extends Resource
                         CounterClosureRequest::STATUS_REJECTED => 'danger',
                         CounterClosureRequest::STATUS_REOPENED => 'info',
                         default => 'gray',
-                    }),
-                Tables\Columns\TextColumn::make('requested_at')
-                    ->label('Diajukan')
-                    ->dateTime('d M Y H:i')
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('reviewedBy.name')
-                    ->label('Ditinjau Oleh')
-                    ->placeholder('-')
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('reviewed_at')
-                    ->label('Waktu Persetujuan')
-                    ->dateTime('d M Y H:i')
-                    ->placeholder('-')
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('reopenedBy.name')
-                    ->label('Dibuka Oleh')
-                    ->formatStateUsing(fn (?string $state, CounterClosureRequest $record): string => $state
-                        ?? ($record->reopened_at ? 'Sistem otomatis' : '-'))
-                    ->placeholder('-')
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('reopened_at')
-                    ->label('Dibuka Kembali')
-                    ->dateTime('d M Y H:i')
-                    ->placeholder('-')
-                    ->toggleable(),
-                Tables\Columns\TextColumn::make('admin_note')
-                    ->label('Catatan Admin')
-                    ->wrap()
-                    ->placeholder('-')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    })
+                    ->width('15%'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -125,6 +99,34 @@ class CounterClosureRequestResource extends Resource
                     ]),
             ])
             ->actions([
+                Tables\Actions\Action::make('viewDetails')
+                    ->label('Detail')
+                    ->icon('heroicon-m-chevron-right')
+                    ->iconButton()
+                    ->tooltip('Lihat detail pengajuan')
+                    ->modalHeading('Detail Pengajuan Penutupan Loket')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Tutup')
+                    ->modalWidth('3xl')
+                    ->form([
+                        Forms\Components\Placeholder::make('detail_loket')
+                            ->label('Loket')
+                            ->content(fn (CounterClosureRequest $record): string => $record->counter?->display_name ?? '-'),
+                        Forms\Components\Placeholder::make('detail_layanan')
+                            ->label('Layanan')
+                            ->content(fn (CounterClosureRequest $record): string => $record->service?->name ?? '-'),
+                        Forms\Components\Placeholder::make('detail_alasan')
+                            ->label('Alasan Lengkap')
+                            ->content(fn (CounterClosureRequest $record): string => $record->reason),
+                        Forms\Components\Placeholder::make('detail_reopened_at')
+                            ->label('Tanggal Dibuka Kembali')
+                            ->content(fn (CounterClosureRequest $record): string => $record->reopened_at
+                                ? $record->reopened_at->format('d F Y, H:i').' WIB'
+                                : 'Belum dibuka kembali'),
+                        Forms\Components\Placeholder::make('detail_admin_note')
+                            ->label('Catatan Admin')
+                            ->content(fn (CounterClosureRequest $record): string => $record->admin_note ?: '-'),
+                    ]),
                 Tables\Actions\Action::make('approve')
                     ->label('Setujui')
                     ->color('success')
@@ -154,6 +156,7 @@ class CounterClosureRequestResource extends Resource
                     ->action(fn (CounterClosureRequest $record, array $data) => app(CounterClosureService::class)
                         ->reject($record, auth()->user(), $data['admin_note'] ?? null)),
             ])
+            ->recordAction('viewDetails')
             ->defaultSort('requested_at', 'desc');
     }
 

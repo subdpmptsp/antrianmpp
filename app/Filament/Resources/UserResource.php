@@ -12,6 +12,7 @@ use Filament\Forms\Get;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -99,6 +100,7 @@ class UserResource extends Resource
                     ->label('Layanan')
                     ->options(fn (): array => Service::query()
                         ->where('is_active', true)
+                        ->where('is_archived', false)
                         ->orderBy('prefix')
                         ->get()
                         ->mapWithKeys(fn (Service $service): array => [
@@ -111,6 +113,7 @@ class UserResource extends Resource
                 Forms\Components\Select::make('counter_id')
                     ->label('Loket')
                     ->options(fn (): array => Counter::withoutGlobalScopes()
+                        ->where('is_archived', false)
                         ->orderBy('name')
                         ->orderBy('code_loket')
                         ->get()
@@ -127,37 +130,68 @@ class UserResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->orderByRaw("CASE WHEN role = 'admin' THEN 0 ELSE 1 END"))
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Nama Pengguna'),
-                Tables\Columns\TextColumn::make('username')
-                    ->label('Username')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('role')
-                    ->label('Peran'),
+                    ->label('Nama Pengguna')
+                    ->description(fn (User $record): string => "Username: {$record->username}")
+                    ->searchable()
+                    ->wrap(),
                 Tables\Columns\IconColumn::make('is_active')
                     ->label('Aktif')
-                    ->boolean(),
+                    ->boolean()
+                    ->grow(false),
                 Tables\Columns\TextColumn::make('service.name')
-                    ->label('Layanan')
-                    ->formatStateUsing(fn (?string $state, User $record): string => $record->role === 'admin' ? 'Semua' : ($state ?? '-')),
-                Tables\Columns\TextColumn::make('counter.name')
-                    ->label('Loket')
-                    ->formatStateUsing(fn (?string $state, User $record): string => $record->role === 'admin' ? 'Semua' : ($state ?? '-')),
+                    ->label('Penugasan')
+                    ->formatStateUsing(fn (?string $state, User $record): string => $record->role === 'admin' ? 'Akses seluruh panel' : ($state ?? '-'))
+                    ->description(fn (User $record): string => $record->role === 'admin'
+                        ? 'Administrator'
+                        : 'Loket: '.($record->counter?->name ?? '-'))
+                    ->wrap(),
                 Tables\Columns\TextColumn::make('password_changed_at')
                     ->label('Rotasi Password')
                     ->dateTime('d M Y H:i')
                     ->placeholder('Belum dirotasi')
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
-            ])
+                Tables\Filters\SelectFilter::make('zone')
+                    ->label('Tampilkan Petugas Zona')
+                    ->options(fn (): array => collect(config('tv.zones', []))
+                        ->mapWithKeys(fn (array $zone, int|string $id): array => [(string) $id => (string) $zone['name']])
+                        ->all())
+                    ->default('1')
+                    ->query(function (Builder $query, array $data): Builder {
+                        $zoneId = $data['value'] ?? null;
+
+                        // Akun admin selalu terlihat paling atas. Akun petugas hanya
+                        // dimuat dari zona yang dipilih agar tabel tetap ringkas.
+                        if (blank($zoneId)) {
+                            return $query->where('role', User::ROLE_ADMIN);
+                        }
+
+                        $zoneName = (string) config("tv.zones.{$zoneId}.name", "ZONA {$zoneId}");
+
+                        return $query->where(function (Builder $scope) use ($zoneName): void {
+                            $scope->where('role', User::ROLE_ADMIN)
+                                ->orWhere(function (Builder $operators) use ($zoneName): void {
+                                    $operators->where('role', User::ROLE_OPERATOR)
+                                        ->whereHas('counter', fn (Builder $counter) => $counter->where('name', $zoneName));
+                                });
+                        });
+                    }),
+            ], layout: Tables\Enums\FiltersLayout::AboveContent)
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->iconButton()
+                    ->tooltip('Edit pengguna'),
                 Tables\Actions\DeleteAction::make()
+                    ->iconButton()
+                    ->tooltip('Hapus pengguna')
                     ->visible(fn (User $record) => $record->role !== 'admin'),
             ])
+            ->actionsColumnLabel('Aksi')
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),

@@ -30,10 +30,11 @@ class ExportController extends Controller
     {
         $from = $request->query('from', now()->toDateString());
         $to   = $request->query('to', now()->toDateString());
+        $zoneId = $request->string('zone_id')->toString() ?: null;
 
-        $fileName = "rekap_layanan_{$from}_sd_{$to}.xlsx";
+        $fileName = "rekap_layanan_{$from}_sd_{$to}".($zoneId && $zoneId !== 'all' ? "_zona_{$zoneId}" : '').'.xlsx';
 
-        return Excel::download(new RekapLayananExport($from, $to), $fileName);
+        return Excel::download(new RekapLayananExport($from, $to, $zoneId), $fileName);
     }
 
     public function cetakSkck(Request $request, $id)

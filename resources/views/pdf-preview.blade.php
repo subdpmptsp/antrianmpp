@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Preview Struk Antrian</title>
+    <title>{{ $mppBranding['name'] }} — Preview Struk Antrean</title>
     <style>
         body {
             font-family: Arial, sans-serif;

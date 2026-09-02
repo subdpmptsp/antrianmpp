@@ -34,7 +34,9 @@ class ServiceResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->with('instansi.counter');
+        return parent::getEloquentQuery()
+            ->where('is_archived', false)
+            ->with('instansi.counter');
     }
 
     public static function form(Form $form): Form
@@ -75,7 +77,16 @@ class ServiceResource extends Resource
                         return $prefix.'-'.str_pad('1', $padding, '0', STR_PAD_LEFT);
                     }),
                 Forms\Components\Toggle::make('is_active')
-                    ->helperText('Aktifkan jika layanan ini sedang dipakai. Jika nonaktif, layanan tidak muncul di pilihan antrian.')
+                    ->label('Tampilkan di Kiosk')
+                    ->helperText('Matikan hanya untuk layanan lama/arsip. Layanan akan disembunyikan dari kiosk dan tidak dapat menerima antrean.')
+                    ->default(true)
+                    ->live()
+                    ->required(),
+                Forms\Components\Toggle::make('is_accepting_queues')
+                    ->label('Buka Antrean Hari Ini')
+                    ->helperText('Jika dimatikan, layanan tetap terlihat abu-abu di kiosk dengan keterangan bahwa layanan sudah tutup.')
+                    ->default(true)
+                    ->visible(fn (Get $get): bool => (bool) $get('is_active'))
                     ->required(),
             ]);
     }
@@ -109,8 +120,11 @@ class ServiceResource extends Resource
                     ->alignCenter()
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\ToggleColumn::make('is_active')
-                    ->label('Status')
-                    ->tooltip('Menandakan layanan sedang aktif atau tidak.'),
+                    ->label('Tampil di Kiosk')
+                    ->tooltip('Matikan untuk menyembunyikan layanan lama atau arsip dari kiosk.'),
+                Tables\Columns\ToggleColumn::make('is_accepting_queues')
+                    ->label('Antrean Hari Ini')
+                    ->tooltip('Matikan untuk menutup antrean sementara tanpa menyembunyikan layanan dari kiosk.'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('zone')

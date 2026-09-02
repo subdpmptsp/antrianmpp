@@ -1,3 +1,8 @@
+// Filament dapat memuat ulang aset saat berpindah halaman tanpa reload penuh.
+// Guard ini mencegah listener audio dan variabel antrean terdaftar dua kali.
+if (!window.__queueCallAudioLoaded) {
+    window.__queueCallAudioLoaded = true;
+
 const soundQueue = [];
 let isSpeaking = false;
 
@@ -47,7 +52,7 @@ async function playQueueSound(message) {
 
 function getVoices() {
     return new Promise((resolve, reject) => {
-        id = setInterval(() => {
+        const id = setInterval(() => {
             const voices = window.speechSynthesis.getVoices()
             if (voices.length) {
                 resolve(voices)
@@ -63,3 +68,5 @@ document.addEventListener('livewire:initialized', () => {
         processQueue();
     });
 });
+
+}

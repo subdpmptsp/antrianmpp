@@ -65,6 +65,8 @@ class QueueKiosk extends Page
         $services = Service::query()
             ->where('instansi_id', $instansiId)
             ->where('is_active', true)
+            ->where('is_archived', false)
+            ->whereHas('instansi.counter', fn ($query) => $query->where('is_active', true))
             ->orderBy('name')
             ->get();
 
@@ -77,6 +79,7 @@ class QueueKiosk extends Page
         $service = $this->services->firstWhere('id', $serviceId);
 
         if (! $service
+            || $service->is_archived
             || ! $service->is_accepting_queues
             || (int) $service->instansi_id !== (int) $this->selectedInstansi) {
             $this->dispatch('kiosk-print-error', message: 'Layanan tidak tersedia pada instansi yang dipilih.');

@@ -54,6 +54,7 @@ class TestPrintPage extends Page
     {
         $serviceId = Service::query()
             ->where('is_active', true)
+            ->where('is_archived', false)
             ->orderBy('id')
             ->value('id');
 

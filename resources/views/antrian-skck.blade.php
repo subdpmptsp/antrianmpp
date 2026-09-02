@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Tiket Antrian</title>
+  <title>{{ $mppBranding['name'] }} — Tiket Antrean</title>
   <style>
     body {
       font-family: Arial, sans-serif;

@@ -27,7 +27,9 @@ class KioskCatalogService
             $institutions = Instansi::query()
                 ->whereIn('counter_id', $counterIds)
                 ->withCount([
-                    'services as active_services_count' => fn ($query) => $query->where('is_active', true),
+                    'services as active_services_count' => fn ($query) => $query
+                        ->where('is_active', true)
+                        ->where('is_archived', false),
                 ])
                 ->orderBy('nama_instansi')
                 ->get()
@@ -78,9 +80,14 @@ class KioskCatalogService
                 ->select('instansis.*')
                 ->selectSub($usageQuery, 'monthly_queue_count')
                 ->whereNotNull('counter_id')
-                ->whereHas('services', fn ($query) => $query->where('is_active', true))
+                ->whereHas('counter', fn ($query) => $query->where('is_active', true))
+                ->whereHas('services', fn ($query) => $query
+                    ->where('is_active', true)
+                    ->where('is_archived', false))
                 ->withCount([
-                    'services as active_services_count' => fn ($query) => $query->where('is_active', true),
+                    'services as active_services_count' => fn ($query) => $query
+                        ->where('is_active', true)
+                        ->where('is_archived', false),
                 ])
                 ->orderByDesc('monthly_queue_count')
                 ->orderByDesc('active_services_count')

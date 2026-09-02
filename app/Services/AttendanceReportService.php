@@ -22,7 +22,7 @@ class AttendanceReportService
         return User::query()
             ->where('role', User::ROLE_OPERATOR)
             ->where('is_active', true)
-            ->with(['service.instansi', 'counter.instansi'])
+            ->with(['service.instansi.counter', 'counter.instansi.counter'])
             ->orderBy('name')
             ->get();
     }
@@ -35,7 +35,7 @@ class AttendanceReportService
     /**
      * @return array<string, mixed>
      */
-    public function todayOverview(Carbon $date, string $search = '', ?int $instansiId = null): array
+    public function todayOverview(Carbon $date, string $search = '', ?int $instansiId = null, ?string $zoneId = null): array
     {
         $operators = $this->activeOperators();
         $attendances = Attendance::query()
@@ -55,6 +55,9 @@ class AttendanceReportService
                 default => 'absent',
             };
 
+            $zoneId = collect(config('tv.zones', []))
+                ->search(fn (array $zone): bool => ($zone['name'] ?? null) === $instansi?->counter?->name);
+
             return [
                 'user_id' => $operator->id,
                 'name' => $operator->name,
@@ -62,14 +65,18 @@ class AttendanceReportService
                 'instansi' => $instansi?->nama_instansi ?? 'Instansi belum ditentukan',
                 'status' => $status,
                 'check_in' => $attendance?->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : null,
+                'zone_id' => $zoneId === false ? null : (string) $zoneId,
             ];
         });
 
-        $expectedRows = $rows->whereIn('status', ['present', 'absent']);
+        $zoneRows = filled($zoneId)
+            ? $rows->where('zone_id', (string) $zoneId)->values()
+            : $rows;
+        $expectedRows = $zoneRows->whereIn('status', ['present', 'absent']);
         $expectedInstansiIds = $expectedRows->pluck('instansi_id')->filter()->unique();
         $representedInstansiIds = $expectedRows->where('status', 'present')->pluck('instansi_id')->filter()->unique();
 
-        $filteredRows = $rows
+        $filteredRows = $zoneRows
             ->when($instansiId, fn (Collection $items) => $items->where('instansi_id', $instansiId))
             ->when(trim($search) !== '', function (Collection $items) use ($search): Collection {
                 $needle = mb_strtolower(trim($search));
@@ -88,6 +95,23 @@ class AttendanceReportService
             'attendance_percentage' => $expectedRows->count() > 0
                 ? (int) round(($expectedRows->where('status', 'present')->count() / $expectedRows->count()) * 100)
                 : 0,
+            'zone_label' => filled($zoneId)
+                ? (string) config("tv.zones.{$zoneId}.name", "ZONA {$zoneId}")
+                : 'Semua Zona',
+            'zones' => collect(config('tv.zones', []))->map(function (array $zone, int|string $id) use ($rows): array {
+                $zoneExpected = $rows->where('zone_id', (string) $id)->whereIn('status', ['present', 'absent']);
+                $present = $zoneExpected->where('status', 'present')->count();
+                $total = $zoneExpected->count();
+
+                return [
+                    'id' => (string) $id,
+                    'name' => (string) ($zone['name'] ?? "ZONA {$id}"),
+                    'total_operators' => $total,
+                    'present_operators' => $present,
+                    'absent_operators' => $zoneExpected->where('status', 'absent')->count(),
+                    'attendance_percentage' => $total > 0 ? (int) round(($present / $total) * 100) : 0,
+                ];
+            })->values(),
             'absent' => $filteredRows->where('status', 'absent')->values(),
             'present' => $filteredRows->where('status', 'present')->values(),
             'off' => $filteredRows->where('status', 'off')->values(),

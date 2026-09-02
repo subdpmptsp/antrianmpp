@@ -114,6 +114,7 @@ class DashboardCallKiosk extends Page
         } else {
             // Admin bisa melihat semua loket yang ada (sama seperti di manajemen loket)
             $this->counters = Counter::with(['service', 'instansi'])
+                ->where('is_archived', false)
                 ->orderBy('name')
                 ->get();
             if ($this->counters->isNotEmpty()) {

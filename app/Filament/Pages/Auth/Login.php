@@ -2,19 +2,25 @@
 
 namespace App\Filament\Pages\Auth;
 
+use App\Http\Responses\RoleBasedLoginResponse;
 use Filament\Pages\Auth\Login as BaseLogin;
 use Filament\Forms\Components\Component;
 use Filament\Forms\Components\TextInput;
+use Filament\Http\Responses\Auth\Contracts\LoginResponse;
 
 class Login extends BaseLogin
 {
-    protected function getRedirectUrl(): string
+    public function authenticate(): ?LoginResponse
     {
-        if (auth()->user()?->can('operate-counter') && auth()->user()?->role === 'operator') {
-            return route('filament.admin.pages.dashboard-call-kiosk');
+        $response = parent::authenticate();
+
+        if ($response === null) {
+            return null;
         }
 
-        return parent::getRedirectUrl();
+        // Jangan gunakan redirect intended bawaan Filament, karena URL loket
+        // yang tersimpan di sesi dapat mengarahkan admin ke workspace petugas.
+        return app(RoleBasedLoginResponse::class);
     }
 
     protected function getCredentialsFromFormData(array $data): array

@@ -46,7 +46,7 @@
             <html>
             <head>
                 <meta charset="utf-8">
-                <title>Struk Antrian</title>
+                <title>{{ $mppBranding['name'] }} — Struk Antrean</title>
                 <style>
                     @page { margin: 0; }
                     body { 

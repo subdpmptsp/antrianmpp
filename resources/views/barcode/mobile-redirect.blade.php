@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Membuka Struk PDF...</title>
+    <title>{{ $mppBranding['name'] }} — Membuka Struk</title>
     <style>
         * {
             margin: 0;

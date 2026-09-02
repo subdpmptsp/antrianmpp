@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TV Display - {{ $zoneName ?? 'Zona' }}</title>
+    <title>{{ $mppBranding['name'] }} — TV {{ $zoneName ?? 'Zona' }}</title>
     @vite(['resources/css/app.css'])
     <style>
         
