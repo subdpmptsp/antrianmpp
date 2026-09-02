@@ -17,9 +17,11 @@ class SettingResource extends Resource
 {
     protected static ?string $model = Setting::class;
 
-    protected static ?string $navigationLabel = 'Pengaturan';
+    protected static ?string $navigationLabel = 'Identitas & Branding MPP';
 
-    protected static ?string $Label = 'Pengaturan';
+    protected static ?string $modelLabel = 'Identitas & Branding MPP';
+
+    protected static ?string $pluralModelLabel = 'Identitas & Branding MPP';
 
     protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
 
@@ -40,20 +42,26 @@ class SettingResource extends Resource
         return $form
             ->schema([
                 Forms\Components\TextInput::make('name')
-                    ->label('Nama Instansi')
-                    ->required(),
+                    ->label('Nama MPP')
+                    ->helperText('Nama ini digunakan pada Kiosk, TV Display, dan halaman loket.')
+                    ->required()
+                    ->maxLength(150),
                 Forms\Components\TextInput::make('address')
-                    ->label('Alamat')
-                    ->required(),
+                    ->label('Alamat MPP')
+                    ->required()
+                    ->maxLength(255),
                 Forms\Components\TextInput::make('phone')
-                    ->label('Nomor Telepon')
-                    ->required(),
+                    ->label('Kontak MPP')
+                    ->tel()
+                    ->maxLength(50),
                 Forms\Components\FileUpload::make('image')
-                    ->label('Logo')
+                    ->label('Logo Utama MPP')
                     ->image()
+                    ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'])
                     ->directory('logo')
-                    ->maxSize(1024)
-                    ->deletable()
+                    ->maxSize(2048)
+                    ->helperText('PNG, JPG, WebP, atau SVG transparan. Maksimal 2 MB.')
+                    ->deletable(),
             ]);
     }
 
@@ -63,13 +71,13 @@ class SettingResource extends Resource
             ->columns([
                 Tables\Columns\ImageColumn::make('image')
                     ->circular()
-                    ->label('Logo'),
+                    ->label('Logo MPP'),
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Nama Instansi'),
+                    ->label('Nama MPP'),
                 Tables\Columns\TextColumn::make('address')
-                    ->label('Alamat'),
+                    ->label('Alamat MPP'),
                 Tables\Columns\TextColumn::make('phone')
-                    ->label('Nomor Telepon'),
+                    ->label('Kontak MPP'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

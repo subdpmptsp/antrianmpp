@@ -7,7 +7,6 @@ use App\Models\Counter;
 use App\Models\Instansi;
 use App\Models\Service;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
@@ -104,13 +103,58 @@ class CounterResource extends Resource
                     ->reactive()
                     ->required(),
 
-                CheckboxList::make('additionalServices')
+                Select::make('additionalServices')
                     ->label('Layanan Tambahan yang Dapat Dipanggil')
-                    ->relationship('additionalServices', 'name')
-                    ->getOptionLabelFromRecordUsing(fn (Service $service): string => $service->prefix.' — '.$service->name)
-                    ->columns(1)
+                    ->multiple()
+                    ->relationship(
+                        'additionalServices',
+                        'name',
+                        fn (Builder $query): Builder => $query
+                            ->where('is_active', true)
+                            ->with('instansi'),
+                    )
                     ->searchable()
-                    ->helperText('Opsional. Petugas tetap memakai satu akun, lalu dapat memilih layanan ini melalui tab pada halaman pemanggilan. Layanan utama sudah muncul otomatis.'),
+                    ->optionsLimit(20)
+                    ->getSearchResultsUsing(function (string $search): array {
+                        $search = trim($search);
+
+                        if (mb_strlen($search) < 2) {
+                            return [];
+                        }
+
+                        return Service::query()
+                            ->with('instansi')
+                            ->where('is_active', true)
+                            ->where(function (Builder $query) use ($search): void {
+                                $query
+                                    ->where('name', 'like', "%{$search}%")
+                                    ->orWhere('prefix', 'like', "%{$search}%")
+                                    ->orWhereHas('instansi', fn (Builder $instansiQuery) => $instansiQuery
+                                        ->where('nama_instansi', 'like', "%{$search}%"));
+                            })
+                            ->orderBy('prefix')
+                            ->limit(20)
+                            ->get()
+                            ->mapWithKeys(fn (Service $service): array => [
+                                $service->id => collect([
+                                    $service->prefix.' — '.$service->name,
+                                    $service->instansi?->nama_instansi,
+                                ])->filter()->implode(' · '),
+                            ])
+                            ->all();
+                    })
+                    ->getOptionLabelsUsing(fn (array $values): array => Service::query()
+                        ->with('instansi')
+                        ->whereIn('id', $values)
+                        ->get()
+                        ->mapWithKeys(fn (Service $service): array => [
+                            $service->id => collect([
+                                $service->prefix.' — '.$service->name,
+                                $service->instansi?->nama_instansi,
+                            ])->filter()->implode(' · '),
+                        ])
+                        ->all())
+                    ->helperText('Ketik minimal 2 karakter untuk mencari kode, layanan, atau instansi. Maksimal 20 hasil ditampilkan; layanan utama loket sudah tersedia otomatis.'),
 
                 Toggle::make('is_active')
                     ->label('Status Aktif')

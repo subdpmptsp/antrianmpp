@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Pages\Auth\Login;
 use App\Http\Middleware\EnforceOperatorSessionLifetime;
+use App\Services\MppBrandingService;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -23,12 +24,17 @@ class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
+        $branding = app(MppBrandingService::class)->current();
+
         return $panel
             ->default()
             ->id('admin')
             ->path('/admin')
             ->login(Login::class)
-            ->brandName('Antrian MPP Siola')
+            ->brandName($branding['name'])
+            ->brandLogo($branding['logo_url'])
+            // Besarkan logo di header, tetapi tetap dibatasi agar sidebar tidak melebar.
+            ->brandLogoHeight('5rem')
             ->colors([
                 'primary' => Color::Blue,
             ])

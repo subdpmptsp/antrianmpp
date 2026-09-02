@@ -40,8 +40,27 @@
         const errorOverlay = root.querySelector('[data-kiosk-error]')
         const errorMessage = root.querySelector('[data-kiosk-error-message]')
         const serviceButtons = [...root.querySelectorAll('[data-kiosk-service]')]
+        const sizePreview = root.querySelector('[data-kiosk-size-preview]')
         let processing = false
         let idleTimer = null
+
+        if (sizePreview) {
+            const cssVariables = {
+                popular: '--kiosk-popular-height',
+                other: '--kiosk-other-height',
+                'popular-logo': '--kiosk-popular-logo',
+                'other-logo': '--kiosk-other-logo',
+            }
+            sizePreview.querySelectorAll('[data-size-control]').forEach((control) => {
+                const update = () => {
+                    const key = control.dataset.sizeControl
+                    root.style.setProperty(cssVariables[key], `${control.value}px`)
+                    const output = sizePreview.querySelector(`[data-size-output="${key}"]`)
+                    if (output) output.textContent = control.value
+                }
+                control.addEventListener('input', update, { signal })
+            })
+        }
 
         const setLoading = (visible) => {
             loading?.classList.toggle('is-visible', visible)

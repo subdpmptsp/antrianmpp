@@ -168,9 +168,9 @@
     <div class="tv-container px-8 py-6">
         <div class="flex items-center justify-between">
             <div class="flex items-center space-x-6">
-                <img src="{{ asset('img/logopemkot_white.png') }}" alt="Logo" class="h-20 object-contain">
+                <img src="{{ $mppBranding['logo_url'] }}" alt="Logo {{ $mppBranding['name'] }}" class="h-20 object-contain">
                 <div>
-                    <h1 class="text-white text-3xl font-bold">SIOLA MALL PELAYANAN PUBLIK</h1>
+                    <h1 class="text-white text-3xl font-bold">{{ $mppBranding['name'] }}</h1>
                     <p class="text-white/80 text-lg">Jl. Tunjungan No.1-3, Genteng, Kec. Genteng, Surabaya</p>
                 </div>
             </div>
@@ -359,11 +359,13 @@
             }
 
             const announcementText = [
-                `nomor antrian ${queueNumberForSpeech}`,
-                `layanan ${serviceNameForSpeech}`,
-                `menuju ke ${counterNameForSpeech}`,
-                instansiText,
-            ].filter(Boolean).join(', ');
+                `nomor antrean ${queueNumberForSpeech}`,
+                `silakan menuju ${counterNameForSpeech}`,
+                `untuk layanan ${serviceNameForSpeech}`,
+            ].filter(Boolean).join(', ')
+                .replace(/\bIKD\b/gi, 'I K D')
+                .replace(/\bYOB\b/gi, 'Y O B')
+                .replace(/\bKTP-el\b/gi, 'E KTP');
             
             if (typeof responsiveVoice !== 'undefined') {
                 responsiveVoice.speak(announcementText, 'Indonesian Female', {

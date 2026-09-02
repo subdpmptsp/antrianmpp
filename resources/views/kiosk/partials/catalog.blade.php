@@ -8,6 +8,7 @@
         : null;
     $popularInstitutions = collect($popularInstansis ?? $instansis->take(6));
     $otherInstitutions = collect($otherInstansis ?? $instansis->skip($popularInstitutions->count()));
+    $sizePreview = request()->boolean('preview');
 @endphp
 
 <div
@@ -20,11 +21,11 @@
     <header class="queue-kiosk__header">
         <div class="queue-kiosk__brand">
             <div class="queue-kiosk__logo queue-kiosk__logo--city">
-                <img src="{{ asset('img/logopemkot_white.png') }}" alt="Logo Pemerintah Kota Surabaya">
+                <img src="{{ $mppBranding['logo_url'] }}" alt="Logo {{ $mppBranding['name'] }}">
             </div>
             <div class="queue-kiosk__brand-copy">
                 <span>Pemerintah Kota Surabaya</span>
-                <h1>Mal Pelayanan Publik Siola</h1>
+                <h1>{{ $mppBranding['name'] }}</h1>
                 <p>Mesin pengambilan nomor antrian</p>
             </div>
         </div>
@@ -73,6 +74,15 @@
                         <p>Silakan hubungi petugas layanan.</p>
                     </div>
                 @else
+                    @if ($sizePreview)
+                        <div class="queue-kiosk__size-preview" data-kiosk-size-preview>
+                            <strong>Mode uji ukuran</strong>
+                            <label>Kartu populer <output data-size-output="popular">72</output> px<input type="range" min="56" max="140" value="72" data-size-control="popular"></label>
+                            <label>Kartu lainnya <output data-size-output="other">68</output> px<input type="range" min="52" max="120" value="68" data-size-control="other"></label>
+                            <label>Logo populer <output data-size-output="popular-logo">46</output> px<input type="range" min="30" max="72" value="46" data-size-control="popular-logo"></label>
+                            <label>Logo lainnya <output data-size-output="other-logo">34</output> px<input type="range" min="24" max="56" value="34" data-size-control="other-logo"></label>
+                        </div>
+                    @endif
                     <div class="queue-kiosk__institution-layout" data-kiosk-institution-grid>
                         <section class="queue-kiosk__institution-section queue-kiosk__institution-section--popular" aria-labelledby="popular-institutions-title">
                             <div class="queue-kiosk__section-heading">
@@ -132,12 +142,53 @@
                 </div>
 
                 <div class="queue-kiosk__service-grid">
+                    @php
+                        $sharedConsultationServices = collect($services)
+                            ->filter(fn ($item): bool => in_array($item->prefix, ['3C-6', '3C-7'], true))
+                            ->values();
+                        $sharedConsultationService = $sharedConsultationServices
+                            ->first(fn ($item): bool => (bool) $item->getAttribute('is_recommended_consultation_counter'))
+                            ?? $sharedConsultationServices->first();
+                    @endphp
+
+                    @if ($sharedConsultationService)
+                        @php
+                            $sharedAccepting = $sharedConsultationServices->contains(fn ($item): bool => (bool) $item->is_accepting_queues);
+                            $sharedWaiting = (int) $sharedConsultationServices->sum(fn ($item): int => (int) ($item->active_queue_count ?? 0));
+                        @endphp
+                        @if (! $isLivewire)
+                            <form id="kiosk-service-shared-consultation" method="POST" action="{{ route('public.queue-kiosk.select-service', ['serviceId' => $sharedConsultationService->id]) }}" class="queue-kiosk__service-form">
+                                @csrf
+                                <input type="hidden" name="queue_request_token" value="{{ $queueRequestToken }}">
+                                <input type="hidden" name="instansi_id" value="{{ $selectedInstansi }}">
+                            </form>
+                        @endif
+                        <button type="button"
+                            class="queue-kiosk__service-card {{ $sharedAccepting ? '' : 'is-unavailable' }}"
+                            data-kiosk-service
+                            data-service-id="{{ $sharedConsultationService->id }}"
+                            data-queue-closed="{{ $sharedAccepting ? 'false' : 'true' }}"
+                            @if (! $isLivewire) data-form-id="kiosk-service-shared-consultation" @endif
+                            @disabled(! $sharedAccepting)
+                        >
+                            <span class="queue-kiosk__service-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5h-2M6 14h12v7H6z"/></svg></span>
+                            <span class="queue-kiosk__service-copy">
+                                <strong>Konsultasi Kependudukan</strong>
+                                <small>{{ $sharedWaiting }} pemohon menunggu · Loket 3C-6 / 3C-7</small>
+                            </span>
+                            <svg class="queue-kiosk__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                    @endif
+
                     @forelse ($services as $service)
                         @php
                             $isAcceptingQueues = (bool) $service->is_accepting_queues;
                             $isDisdukcapilConsultationCounter = (bool) $service->getAttribute('is_disdukcapil_consultation_counter');
                             $isRecommendedConsultationCounter = (bool) $service->getAttribute('is_recommended_consultation_counter');
                         @endphp
+                        @if ($isDisdukcapilConsultationCounter)
+                            @continue
+                        @endif
                         @if (! $isLivewire)
                             <form
                                 id="kiosk-service-{{ $service->id }}"

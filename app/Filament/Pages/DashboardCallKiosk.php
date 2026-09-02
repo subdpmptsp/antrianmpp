@@ -21,6 +21,9 @@ class DashboardCallKiosk extends Page
     // protected static ?string $navigationIcon = 'heroicon-o-speakerphone';
     protected static string $view = 'filament.pages.dashboard-call-kiosk';
 
+    /** The operator workspace intentionally has no Filament sidebar. */
+    protected static string $layout = 'filament.layouts.operator-call-kiosk';
+
     protected static ?string $title = 'Loket Panggilan Antrian';
 
     protected static ?string $navigationLabel = 'Loket Panggilan';
@@ -683,6 +686,7 @@ class DashboardCallKiosk extends Page
             'callableServices' => $callableServices,
             'activeService' => $activeService,
             'announcementOpeningAudioUrl' => $audioConfig['url'] ?? asset(config('audio.fallback.url', 'sounds/opening.mp3')),
+            'ttsSettings' => $audioConfig['tts'] ?? [],
         ];
     }
 }

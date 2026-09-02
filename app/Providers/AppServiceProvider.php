@@ -7,6 +7,7 @@ use App\Listeners\RecordAttendanceOnLogout;
 use App\Models\User;
 use App\Services\QueueService;
 use App\Services\ThermalPrinterService;
+use App\Services\MppBrandingService;
 use Filament\Support\Assets\Js;
 use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Facades\FilamentView;
@@ -16,6 +17,7 @@ use Illuminate\Auth\Events\Logout as LaravelLogout;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\View;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -31,6 +33,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(QueueService::class, function ($app) {
             return new QueueService;
         });
+
+        $this->app->singleton(MppBrandingService::class, function ($app) {
+            return new MppBrandingService;
+        });
     }
 
     /**
@@ -43,6 +49,10 @@ class AppServiceProvider extends ServiceProvider
             'operate-counter',
             fn (User $user): bool => $user->isAdmin() || $user->isOperator(),
         );
+
+        View::composer('*', function ($view): void {
+            $view->with('mppBranding', app(MppBrandingService::class)->current());
+        });
 
         FilamentAsset::register([
             Js::make('thermal-printer', asset('js/thermal-printer.js')),

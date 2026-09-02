@@ -85,12 +85,14 @@
                         $assignedCounter = $this->selectedCounter;
                     @endphp
                     <div class="lg:col-span-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
-                        <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Loket Tugas Anda</div>
+                        <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Instansi & Layanan Tugas Anda</div>
                         <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
-                            {{ $assignedCounter?->display_name ?? '-' }}
+                            {{ $assignedCounter?->instansi?->nama_instansi ?? 'Instansi belum ditentukan' }}
                         </div>
                         <div class="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                            {{ $assignedCounter?->name ?? '-' }} · {{ $assignedCounter?->service?->name ?? 'Layanan belum ditentukan' }}
+                            {{ $assignedCounter?->service?->name ?? 'Layanan belum ditentukan' }}
+                            <span class="mx-1.5">·</span>
+                            {{ $assignedCounter?->display_name ?? 'Loket belum ditentukan' }}
                         </div>
                     </div>
                 @else
@@ -599,10 +601,10 @@
     <script>
         (() => {
             const AUDIO_CONFIG = {
-                voice: 'Indonesian Female',
-                rate: 0.8,
-                pitch: 1,
-                volume: 1,
+                voice: @js($ttsSettings['voice'] ?? 'auto'),
+                rate: Number(@js($ttsSettings['rate'] ?? 0.9)),
+                pitch: Number(@js($ttsSettings['pitch'] ?? 1.0)),
+                volume: Number(@js($ttsSettings['volume'] ?? 1.0)),
                 fallbackAudio: @js($announcementOpeningAudioUrl ?? asset('sounds/opening.mp3')),
             }
 
@@ -624,12 +626,18 @@
             }
 
             const normalizeAnnouncement = (data) => {
-                // Tanda penghubung pada nomor antrean adalah pemisah, bukan
-                // angka negatif. Koma membuat mesin suara memberi jeda singkat.
-                const queueNumber = String(data?.queueNumber || 'Tidak diketahui').replace(/-/g, ', ')
+                const digitWords = ['nol', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan']
+                const queueRaw = String(data?.queueNumber || 'Tidak diketahui')
+                const queueNumber = queueRaw
+                    .split(/[^a-zA-Z0-9]+/)
+                    .filter(Boolean)
+                    .map((part) => [...part].map((char) => /\d/.test(char) ? digitWords[Number(char)] : char.toUpperCase()).join(' '))
+                    .join(' ')
                 const serviceName = String(data?.serviceName || 'Layanan').toLowerCase()
-                    .replace(/\bikd\b/gi, 'i ka de')
-                    .replace(/\byob\b/gi, 'ye o be')
+                    // Ejaan berjarak membuat semua singkatan dibaca per huruf.
+                    .replace(/\bikd\b/gi, 'I K D')
+                    .replace(/\byob\b/gi, 'Y O B')
+                    .replace(/\bktp-el\b/gi, 'E KTP')
                 const counterName = String(data?.counterName || 'Loket')
                 const zoneOneCounter = counterName.match(/^Loket\s+Z1-(\d{2})$/i)
                 const counterNameForSpeech = zoneOneCounter
@@ -646,7 +654,7 @@
                     counterNameForSpeech,
                     zone,
                     zoneText,
-                    text: `nomor antrian ${queueNumber} menuju ke ${counterNameForSpeech}, ${finalServiceName} ${zoneText}`,
+                    text: `nomor antrean ${queueNumber}, silakan menuju ${counterNameForSpeech}, untuk ${finalServiceName}`,
                 }
             }
 
@@ -701,7 +709,10 @@
                         utterance.volume = AUDIO_CONFIG.volume
 
                         const voices = speechSynthesis.getVoices()
-                        const indonesianVoice = voices.find((voice) => voice.lang?.toLowerCase().startsWith('id'))
+                        const configuredVoice = AUDIO_CONFIG.voice !== 'auto'
+                            ? voices.find((voice) => voice.name === AUDIO_CONFIG.voice)
+                            : null
+                        const indonesianVoice = configuredVoice || voices.find((voice) => voice.lang?.toLowerCase().startsWith('id'))
                         if (indonesianVoice) utterance.voice = indonesianVoice
 
                         utterance.onend = resolve

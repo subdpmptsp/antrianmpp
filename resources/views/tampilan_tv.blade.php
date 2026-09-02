@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SIOLA MALL PELAYANAN PUBLIK - TV Display</title>
+    <title>{{ $mppBranding['name'] }} - TV Display</title>
     @vite(['resources/css/app.css'])
     <style>
         * {
@@ -186,7 +186,7 @@
     <div class="bg-gradient-to-r from-blue-900 via-blue-800 to-blue-700 text-white py-6 px-8 shadow-2xl">
         <div class="flex justify-between items-center">
             <div>
-                <h1 class="tv-title font-black tracking-wide glow-text">SIOLA MALL PELAYANAN PUBLIK</h1>
+                <h1 class="tv-title font-black tracking-wide glow-text">{{ $mppBranding['name'] }}</h1>
                 <p class="tv-subtitle font-semibold mt-2 text-blue-100">KOTA SURABAYA</p>
                 <p class="text-xl mt-2 text-blue-200">Jl. Tunjungan No.1-3, Genteng, Kec. Genteng, Surabaya, Jawa Timur 60275</p>
             </div>

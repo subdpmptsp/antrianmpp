@@ -31,6 +31,7 @@ class AudioConfigurationService
             'name' => $config['name'] ?? 'Audio Pemanggilan',
             'description' => $config['description'] ?? null,
             'type' => $config['type'] ?? 'announcement',
+            'tts' => array_merge($this->defaults()['tts'], $config['tts'] ?? []),
             'updated_at' => now()->toIso8601String(),
         ]);
 
@@ -53,6 +54,12 @@ class AudioConfigurationService
             'name' => 'Audio Lokal Bawaan',
             'description' => null,
             'type' => 'announcement',
+            'tts' => [
+                'voice' => 'auto',
+                'rate' => 0.9,
+                'pitch' => 1.0,
+                'volume' => 1.0,
+            ],
             'updated_at' => null,
         ];
     }

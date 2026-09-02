@@ -69,9 +69,18 @@ class QueueService
                 ->lockForUpdate()
                 ->findOrFail($serviceId);
 
+            // Services dengan prefix yang sama memakai satu urutan nomor.
+            // Semua baris layanan tersebut dikunci dalam transaksi agar dua
+            // loket tidak dapat menerbitkan nomor yang sama secara bersamaan.
+            $serviceIdsForPrefix = Service::query()
+                ->where('prefix', $service->prefix)
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->pluck('id');
+
             return Queue::create([
                 'service_id' => $service->id,
-                'number' => $this->generateNumberForService($service),
+                'number' => $this->generateNumberForService($service, $serviceIdsForPrefix),
                 'status' => $status,
             ]);
         });
@@ -81,13 +90,19 @@ class QueueService
     {
         $service = Service::findOrFail($serviceId);
 
-        return $this->generateNumberForService($service);
+        $serviceIdsForPrefix = Service::query()
+            ->where('prefix', $service->prefix)
+            ->where('is_active', true)
+            ->pluck('id');
+
+        return $this->generateNumberForService($service, $serviceIdsForPrefix);
     }
 
-    private function generateNumberForService(Service $service): string
+    private function generateNumberForService(Service $service, $serviceIds = null): string
     {
+        $serviceIds ??= collect([$service->id]);
 
-        $lastQueue = Queue::where('service_id', $service->id)
+        $lastQueue = Queue::whereIn('service_id', $serviceIds)
             ->whereDate('created_at', now()->toDateString())
             ->orderByDesc('id')
             ->first();

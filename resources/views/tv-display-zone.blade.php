@@ -137,9 +137,9 @@
     <div class="zone-header px-6 py-4">
         <div class="flex items-center justify-between">
             <div class="flex items-center space-x-4">
-                <img src="{{ asset('img/logopemkot_white.png') }}" alt="Logo" class="h-16 object-contain">
+                <img src="{{ $mppBranding['logo_url'] }}" alt="Logo {{ $mppBranding['name'] }}" class="h-16 object-contain">
                 <div>
-                    <h1 class="text-white text-2xl font-bold">SIOLA MALL PELAYANAN PUBLIK</h1>
+                    <h1 class="text-white text-2xl font-bold">{{ $mppBranding['name'] }}</h1>
                     <p class="text-white/80 text-sm">Jl. Tunjungan No.1-3, Genteng, Kec. Genteng, Surabaya</p>
                 </div>
             </div>
@@ -327,7 +327,11 @@
                 instansiText = 'U-P-T-S-P';
             }
             
-            const announcementText = `nomor antrian ${data.queueNumber}, layanan ${data.serviceName.toLowerCase()}, menuju ke loket ${data.servicePrefix || 'A'}, ${instansiText}`;
+            const serviceText = String(data.serviceName || 'Layanan').toLowerCase()
+                .replace(/\bikd\b/gi, 'I K D')
+                .replace(/\byob\b/gi, 'Y O B')
+                .replace(/\bktp-el\b/gi, 'E KTP');
+            const announcementText = `nomor antrean ${data.queueNumber}, silakan menuju loket ${data.servicePrefix || 'A'} untuk layanan ${serviceText}`;
             
             if (typeof responsiveVoice !== 'undefined') {
                 responsiveVoice.speak(announcementText, 'Indonesian Female', {

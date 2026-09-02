@@ -73,9 +73,9 @@
     <div class="px-8 py-12">
         <div class="flex items-center justify-between">
             <div class="flex items-center space-x-6">
-                <img src="{{ asset('img/logopemkot_white.png') }}" alt="Logo" class="h-24 object-contain">
+                <img src="{{ $mppBranding['logo_url'] }}" alt="Logo {{ $mppBranding['name'] }}" class="h-24 object-contain">
                 <div>
-                    <h1 class="text-white text-5xl font-bold">SIOLA MALL PELAYANAN PUBLIK</h1>
+                    <h1 class="text-white text-5xl font-bold">{{ $mppBranding['name'] }}</h1>
                     <p class="text-white/80 text-xl mt-2">Jl. Tunjungan No.1-3, Genteng, Kec. Genteng, Surabaya</p>
                 </div>
             </div>

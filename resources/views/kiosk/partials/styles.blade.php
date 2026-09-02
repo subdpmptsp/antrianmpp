@@ -14,7 +14,7 @@
     button, a { -webkit-tap-highlight-color: transparent; }
     button { font: inherit; }
     .queue-kiosk * { box-sizing: border-box; }
-    .queue-kiosk { min-height: 100vh; display: flex; flex-direction: column; background: linear-gradient(180deg, #f8fbfe 0%, #edf3f9 100%); }
+    .queue-kiosk { --kiosk-popular-height: 72px; --kiosk-other-height: 68px; --kiosk-popular-logo: 46px; --kiosk-other-logo: 34px; min-height: 100vh; display: flex; flex-direction: column; background: linear-gradient(180deg, #f8fbfe 0%, #edf3f9 100%); }
 
     .queue-kiosk__header { min-height: 108px; display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 17px clamp(24px, 4vw, 58px); color: #fff; background: linear-gradient(120deg, #07264f, #07589d); box-shadow: 0 10px 30px rgba(8, 43, 92, .2); }
     .queue-kiosk__brand, .queue-kiosk__header-tools, .queue-kiosk__toolbar, .queue-kiosk__selected-institution, .queue-kiosk__institution-card, .queue-kiosk__service-card, .queue-kiosk__footer, .queue-kiosk__connection { display: flex; align-items: center; }
@@ -51,7 +51,7 @@
     .queue-kiosk__intro h2 { margin: 6px 0 5px; font-size: clamp(27px, 3vw, 40px); line-height: 1.1; font-weight: 850; letter-spacing: -.02em; }
     .queue-kiosk__intro p { margin: 0; color: var(--kiosk-muted); font-size: 15px; }
 
-    .queue-kiosk__institution-layout { display: grid; grid-template-columns: minmax(270px, 2fr) minmax(0, 3fr); gap: clamp(20px, 2.4vw, 34px); align-items: start; }
+    .queue-kiosk__institution-layout { display: block; }
     .queue-kiosk__institution-section { min-width: 0; }
     .queue-kiosk__section-heading { min-height: 44px; display: flex; align-items: center; gap: 10px; margin-bottom: 11px; }
     .queue-kiosk__section-heading h3 { margin: 0; color: #16283e; font-size: 16px; line-height: 1.2; font-weight: 850; }
@@ -59,18 +59,18 @@
     .queue-kiosk__section-icon { width: 32px; height: 32px; display: grid; place-items: center; flex: 0 0 auto; color: #42617e; border-radius: 10px; background: #edf3f8; }
     .queue-kiosk__section-icon--popular { color: #a85408; background: #fff3df; }
     .queue-kiosk__section-icon svg { width: 19px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-    .queue-kiosk__popular-list { display: grid; grid-template-columns: 1fr; gap: 9px; }
-    .queue-kiosk__other-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+    .queue-kiosk__popular-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-bottom: 18px; }
+    .queue-kiosk__other-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
     .queue-kiosk__section-empty { grid-column: 1 / -1; min-height: 90px; display: grid; place-items: center; padding: 18px; color: var(--kiosk-muted); text-align: center; border: 1px dashed #cbd8e5; border-radius: 14px; background: #f8fbfe; font-size: 12px; }
     .queue-kiosk__institution-card, .queue-kiosk__service-card { min-height: 116px; gap: 14px; padding: 16px 18px; color: var(--kiosk-ink); text-align: left; text-decoration: none; border: 1px solid #d7e2ed; border-radius: 19px; background: #fff; box-shadow: 0 7px 18px rgba(31,61,94,.06); cursor: pointer; transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
-    .queue-kiosk__institution-card { min-width: 0; width: 100%; min-height: 68px; gap: 10px; padding: 9px 11px; border-radius: 13px; box-shadow: 0 4px 12px rgba(31,61,94,.045); }
-    .queue-kiosk__institution-card--popular { min-height: 72px; padding: 10px 13px; border: 2px solid #f1a332; background: linear-gradient(105deg, #fffdf9, #fff); box-shadow: 0 6px 16px rgba(190,105,16,.07); }
+    .queue-kiosk__institution-card { min-width: 0; width: 100%; min-height: var(--kiosk-other-height); gap: 10px; padding: 9px 11px; border-radius: 13px; box-shadow: 0 4px 12px rgba(31,61,94,.045); }
+    .queue-kiosk__institution-card--popular { min-height: var(--kiosk-popular-height); padding: 10px 13px; border: 2px solid #f1a332; background: linear-gradient(105deg, #fffdf9, #fff); box-shadow: 0 6px 16px rgba(190,105,16,.07); }
     .queue-kiosk__institution-card--compact { min-height: 68px; border-color: #dde3e9; box-shadow: 0 3px 10px rgba(31,61,94,.035); }
     .queue-kiosk__institution-card:hover, .queue-kiosk__institution-card:focus-visible, .queue-kiosk__service-card:hover, .queue-kiosk__service-card:focus-visible { transform: translateY(-3px); border-color: #80afe0; box-shadow: 0 14px 28px rgba(20,83,143,.14); outline: none; }
     .queue-kiosk__institution-card:active, .queue-kiosk__service-card:active { transform: scale(.985); }
     .queue-kiosk__institution-logo, .queue-kiosk__service-icon { width: 58px; height: 58px; display: grid; place-items: center; flex: 0 0 auto; color: var(--kiosk-blue); border-radius: 16px; background: var(--kiosk-sky); overflow: hidden; }
-    .queue-kiosk__institution-logo { width: 34px; height: 34px; border-radius: 10px; }
-    .queue-kiosk__institution-card--popular .queue-kiosk__institution-logo { width: 46px; height: 46px; border-radius: 12px; }
+    .queue-kiosk__institution-logo { width: var(--kiosk-other-logo); height: var(--kiosk-other-logo); border-radius: 10px; }
+    .queue-kiosk__institution-card--popular .queue-kiosk__institution-logo { width: var(--kiosk-popular-logo); height: var(--kiosk-popular-logo); border-radius: 12px; }
     .queue-kiosk__institution-logo.has-image { padding: 3px; background: transparent; border: 0; }
     .queue-kiosk__institution-logo.is-fallback { color: #65778a; background: #eef2f6; }
     .queue-kiosk__institution-logo img { width: 100%; height: 100%; object-fit: contain; }
@@ -109,6 +109,10 @@
     .queue-kiosk__footer { min-height: 54px; justify-content: space-between; gap: 20px; padding: 0 clamp(24px,4vw,58px); color: #607186; border-top: 1px solid #d7e2ed; background: rgba(255,255,255,.92); font-size: 12px; }
     .queue-kiosk__connection { gap: 9px; color: #24684f; }
     .queue-kiosk__connection i { width: 9px; height: 9px; border-radius: 50%; background: var(--kiosk-success); box-shadow: 0 0 0 4px rgba(20,134,90,.12); }
+    .queue-kiosk__size-preview { position: fixed; z-index: 120; top: 16px; right: 16px; width: 220px; display: grid; gap: 7px; padding: 12px; color: #18314d; border: 1px solid #b9cfe3; border-radius: 12px; background: rgba(255,255,255,.97); box-shadow: 0 10px 28px rgba(20,50,80,.18); font-size: 11px; }
+    .queue-kiosk__size-preview strong { font-size: 12px; }
+    .queue-kiosk__size-preview label { display: grid; grid-template-columns: 1fr auto; gap: 2px 6px; }
+    .queue-kiosk__size-preview input { grid-column: 1 / -1; width: 100%; accent-color: #1264ad; }
     .queue-kiosk__connection.is-offline { color: var(--kiosk-danger); }
     .queue-kiosk__connection.is-offline i { background: var(--kiosk-danger); box-shadow: 0 0 0 4px rgba(198,56,72,.12); }
 
@@ -149,7 +153,7 @@
         .queue-kiosk__section-icon { width: 28px; height: 28px; }
         .queue-kiosk__section-heading p { display: none; }
         .queue-kiosk__popular-list, .queue-kiosk__other-grid { gap: 6px; }
-        .queue-kiosk__institution-card, .queue-kiosk__institution-card--popular, .queue-kiosk__institution-card--compact { height: 52px; min-height: 52px; padding: 5px 8px; }
+        .queue-kiosk__institution-card, .queue-kiosk__institution-card--popular, .queue-kiosk__institution-card--compact { height: auto; min-height: 72px; padding: 8px 10px; }
         .queue-kiosk__service-grid { gap: 8px; }
         .queue-kiosk__service-card { min-height: 76px; padding: 10px 12px; }
         .queue-kiosk__institution-logo, .queue-kiosk__institution-card--popular .queue-kiosk__institution-logo { width: 34px; height: 34px; }
@@ -161,8 +165,8 @@
     }
 
     @media (max-width: 1000px) {
-        .queue-kiosk__institution-layout { grid-template-columns: minmax(240px, 2fr) minmax(0, 3fr); gap: 16px; }
-        .queue-kiosk__other-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .queue-kiosk__institution-layout { display: block; }
+        .queue-kiosk__popular-list, .queue-kiosk__other-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     @media (max-width: 760px) {

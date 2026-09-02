@@ -44,6 +44,11 @@ class AudioManagementPage extends Page implements HasForms, HasActions
     public $audioName = '';
     public $audioDescription = '';
     public $audioType = 'announcement';
+    public $ttsVoice = 'auto';
+    public $ttsRate = 0.9;
+    public $ttsPitch = 1.0;
+    public $ttsVolume = 1.0;
+    public $ttsPreviewText = 'Nomor antrean A nol empat dua, silakan menuju Loket Tiga untuk layanan I K D.';
 
     public function mount(): void
     {
@@ -52,6 +57,11 @@ class AudioManagementPage extends Page implements HasForms, HasActions
         $this->audioName = $audioConfig['name'];
         $this->audioDescription = $audioConfig['description'] ?? '';
         $this->audioType = $audioConfig['type'];
+        $tts = $audioConfig['tts'] ?? [];
+        $this->ttsVoice = $tts['voice'] ?? 'auto';
+        $this->ttsRate = $tts['rate'] ?? 0.9;
+        $this->ttsPitch = $tts['pitch'] ?? 1.0;
+        $this->ttsVolume = $tts['volume'] ?? 1.0;
     }
 
     public function form(Form $form): Form
@@ -144,10 +154,28 @@ class AudioManagementPage extends Page implements HasForms, HasActions
             ->send();
     }
 
+    public function testTts(): void
+    {
+        $this->validate([
+            'ttsPreviewText' => 'required|string|max:500',
+            'ttsRate' => 'numeric|between:0.5,1.5',
+            'ttsPitch' => 'numeric|between:0.5,1.5',
+            'ttsVolume' => 'numeric|between:0,1',
+        ]);
+
+        $this->dispatch('test-tts',
+            text: $this->ttsPreviewText,
+            voice: $this->ttsVoice,
+            rate: (float) $this->ttsRate,
+            pitch: (float) $this->ttsPitch,
+            volume: (float) $this->ttsVolume,
+        );
+    }
+
     public function saveAudio(): void
     {
         $this->validate([
-            'audioUrl' => 'required|url',
+            'audioUrl' => 'nullable|url',
             'audioName' => 'required|string|max:255',
         ]);
 
@@ -156,6 +184,12 @@ class AudioManagementPage extends Page implements HasForms, HasActions
             'name' => $this->audioName,
             'description' => $this->audioDescription,
             'type' => $this->audioType,
+            'tts' => [
+                'voice' => $this->ttsVoice,
+                'rate' => (float) $this->ttsRate,
+                'pitch' => (float) $this->ttsPitch,
+                'volume' => (float) $this->ttsVolume,
+            ],
         ]);
 
         Notification::make()
