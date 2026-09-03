@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\InvalidatesMasterDataCache;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -84,6 +85,12 @@ class Counter extends Model
     public function closureRequests()
     {
         return $this->hasMany(CounterClosureRequest::class);
+    }
+
+    /** Pengaturan jadwal khusus untuk loket ini; kosong berarti ikut jadwal global. */
+    public function queueScheduleOverride(): HasOne
+    {
+        return $this->hasOne(CounterQueueScheduleOverride::class);
     }
 
     // Queue yang aktif (sedang dilayani atau dipanggil)

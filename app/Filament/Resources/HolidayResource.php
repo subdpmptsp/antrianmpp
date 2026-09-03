@@ -24,6 +24,11 @@ class HolidayResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Kalender Hari Libur';
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public static function canAccess(): bool
     {
         return auth()->user()?->can('access-admin-area') ?? false;

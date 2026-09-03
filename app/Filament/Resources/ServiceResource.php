@@ -12,6 +12,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
@@ -57,10 +58,31 @@ class ServiceResource extends Resource
                     ->maxLength(255),
                 Forms\Components\TextInput::make('prefix')
                     ->label('Prefix')
-                    ->helperText('Awalan nomor antrian, misalnya A, B, BPOM, atau 1F.')
+                    ->helperText('Kode nomor antrean harus unik. Periksa workbook kode loket/layanan sebelum menentukan kode baru.')
                     ->live(onBlur: true)
                     ->maxLength(10)
                     ->required()
+                    ->rule(function (?Service $record): Closure {
+                        return function (string $attribute, mixed $value, Closure $fail) use ($record): void {
+                            $prefix = strtoupper(trim((string) $value));
+
+                            if ($prefix === '') {
+                                return;
+                            }
+
+                            $conflict = Service::query()
+                                ->whereRaw('UPPER(TRIM(prefix)) = ?', [$prefix])
+                                ->when($record, fn (Builder $query): Builder => $query->whereKeyNot($record->getKey()))
+                                ->with('instansi')
+                                ->first();
+
+                            if ($conflict) {
+                                $owner = trim(($conflict->instansi?->nama_instansi ? $conflict->instansi->nama_instansi.' — ' : '').$conflict->name);
+                                $fail("Kode {$prefix} sudah terpakai untuk antrean lain: {$owner}. Silakan cek workbook lalu gunakan kode berbeda.");
+                            }
+                        };
+                    })
+                    ->dehydrateStateUsing(fn (?string $state): ?string => filled($state) ? strtoupper(trim($state)) : null)
                     ->maxLength(255),
                 Forms\Components\Hidden::make('padding')
                     ->default(2),
@@ -97,7 +119,19 @@ class ServiceResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->label('Nama Layanan')
-                    ->searchable()
+                    ->searchable(
+                        query: function (Builder $query, string $search): Builder {
+                            return $query->where(function (Builder $searchQuery) use ($search): void {
+                                $searchQuery
+                                    ->where('name', 'like', "%{$search}%")
+                                    ->orWhereHas(
+                                        'instansi',
+                                        fn (Builder $instansiQuery): Builder => $instansiQuery
+                                            ->where('nama_instansi', 'like', "%{$search}%"),
+                                    );
+                            });
+                        },
+                    )
                     ->weight('bold')
                     ->description(function (Service $record): string {
                         $details = collect([

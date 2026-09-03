@@ -147,14 +147,17 @@
                             ->filter(fn ($item): bool => in_array($item->prefix, ['3C-6', '3C-7'], true))
                             ->values();
                         $sharedConsultationService = $sharedConsultationServices
+                            ->first(fn ($item): bool => (bool) $item->getAttribute('queue_available'))
+                            ?? $sharedConsultationServices
                             ->first(fn ($item): bool => (bool) $item->getAttribute('is_recommended_consultation_counter'))
                             ?? $sharedConsultationServices->first();
                     @endphp
 
                     @if ($sharedConsultationService)
                         @php
-                            $sharedAccepting = $sharedConsultationServices->contains(fn ($item): bool => (bool) $item->is_accepting_queues);
+                            $sharedAccepting = $sharedConsultationServices->contains(fn ($item): bool => (bool) $item->getAttribute('queue_available'));
                             $sharedWaiting = (int) $sharedConsultationServices->sum(fn ($item): int => (int) ($item->active_queue_count ?? 0));
+                            $sharedClosedMessage = $sharedConsultationServices->first()?->getAttribute('queue_unavailable_message') ?: 'Layanan ini sedang tidak menerima nomor antrean.';
                         @endphp
                         @if (! $isLivewire)
                             <form id="kiosk-service-shared-consultation" method="POST" action="{{ route('public.queue-kiosk.select-service', ['serviceId' => $sharedConsultationService->id]) }}" class="queue-kiosk__service-form">
@@ -174,7 +177,7 @@
                             <span class="queue-kiosk__service-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5h-2M6 14h12v7H6z"/></svg></span>
                             <span class="queue-kiosk__service-copy">
                                 <strong>Konsultasi Kependudukan</strong>
-                                <small>{{ $sharedWaiting }} pemohon menunggu · Loket 3C-6 / 3C-7</small>
+                                <small>{{ $sharedAccepting ? $sharedWaiting.' pemohon menunggu · Loket 3C-6 / 3C-7' : $sharedClosedMessage }}</small>
                             </span>
                             <svg class="queue-kiosk__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                         </button>
@@ -182,7 +185,8 @@
 
                     @forelse ($services as $service)
                         @php
-                            $isAcceptingQueues = (bool) $service->is_accepting_queues;
+                            $isAcceptingQueues = (bool) $service->getAttribute('queue_available');
+                            $queueUnavailableMessage = (string) ($service->getAttribute('queue_unavailable_message') ?: 'Layanan ini sedang tidak menerima nomor antrean.');
                             $isDisdukcapilConsultationCounter = (bool) $service->getAttribute('is_disdukcapil_consultation_counter');
                             $isRecommendedConsultationCounter = (bool) $service->getAttribute('is_recommended_consultation_counter');
                         @endphp
@@ -224,7 +228,7 @@
                                         <span class="queue-kiosk__recommendation">Disarankan</span>
                                     @endif
                                 @else
-                                    <small>{{ $isAcceptingQueues ? 'Sentuh untuk mencetak tiket' : 'Layanan ini sudah tutup. Silakan kembali esok hari.' }}</small>
+                                    <small>{{ $isAcceptingQueues ? 'Sentuh untuk mencetak tiket' : $queueUnavailableMessage }}</small>
                                 @endif
                             </span>
                             <svg class="queue-kiosk__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>

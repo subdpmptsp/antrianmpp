@@ -2,10 +2,12 @@
 
 namespace App\Filament\Pages;
 
+use App\Exceptions\QueueUnavailableException;
 use App\Models\Queue;
 use App\Models\Service;
 use App\Services\KioskCatalogService;
 use App\Services\QueueService;
+use App\Services\ServiceQueueAvailabilityService;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
@@ -72,6 +74,12 @@ class QueueKiosk extends Page
 
         $this->services = app(KioskCatalogService::class)
             ->withDisdukcapilConsultationQueueCounts($services);
+        $availability = app(ServiceQueueAvailabilityService::class);
+        $this->services->each(function (Service $service) use ($availability): void {
+            $state = $availability->evaluate($service);
+            $service->setAttribute('queue_available', $state['available']);
+            $service->setAttribute('queue_unavailable_message', $state['message']);
+        });
     }
 
     public function selectService(int $serviceId, QueueService $queueService): void
@@ -90,6 +98,8 @@ class QueueKiosk extends Page
         try {
             $queue = $queueService->reserveQueueForPrinting($service->id);
             $this->dispatch('ticket-ready', ...$this->printPayload($queue));
+        } catch (QueueUnavailableException $exception) {
+            $this->dispatch('kiosk-print-error', message: $exception->getMessage());
         } catch (\Throwable $exception) {
             Log::error('Gagal menyiapkan tiket kiosk admin.', [
                 'service_id' => $serviceId,

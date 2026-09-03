@@ -65,35 +65,39 @@ class KioskCatalogService
      */
     public function rankedInstitutions(): Collection
     {
-        $periodKey = now()->format('Y-m');
+        // Katalog hanya memuat sekitar puluhan instansi dan menjadi pintu utama kiosk.
+        // Membacanya langsung lebih aman daripada mempertahankan cache lama setelah admin
+        // menambah layanan atau memindahkan relasi loket.
+        return $this->queryRankedInstitutions();
+    }
 
-        return $this->cache->remember("kiosk:institutions:ranked:{$periodKey}:v1", function (): Collection {
-            $from = now()->startOfMonth();
-            $until = now()->endOfDay();
-            $usageQuery = DB::table('queues as usage_queues')
-                ->join('services as usage_services', 'usage_services.id', '=', 'usage_queues.service_id')
-                ->selectRaw('COUNT(*)')
-                ->whereColumn('usage_services.instansi_id', 'instansis.instansi_id')
-                ->whereBetween('usage_queues.created_at', [$from, $until]);
+    private function queryRankedInstitutions(): Collection
+    {
+        $from = now()->startOfMonth();
+        $until = now()->endOfDay();
+        $usageQuery = DB::table('queues as usage_queues')
+            ->join('services as usage_services', 'usage_services.id', '=', 'usage_queues.service_id')
+            ->selectRaw('COUNT(*)')
+            ->whereColumn('usage_services.instansi_id', 'instansis.instansi_id')
+            ->whereBetween('usage_queues.created_at', [$from, $until]);
 
-            return Instansi::query()
-                ->select('instansis.*')
-                ->selectSub($usageQuery, 'monthly_queue_count')
-                ->whereNotNull('counter_id')
-                ->whereHas('counter', fn ($query) => $query->where('is_active', true))
-                ->whereHas('services', fn ($query) => $query
+        return Instansi::query()
+            ->select('instansis.*')
+            ->selectSub($usageQuery, 'monthly_queue_count')
+            ->whereNotNull('counter_id')
+            ->whereHas('counter', fn ($query) => $query->where('is_active', true))
+            ->whereHas('services', fn ($query) => $query
+                ->where('is_active', true)
+                ->where('is_archived', false))
+            ->withCount([
+                'services as active_services_count' => fn ($query) => $query
                     ->where('is_active', true)
-                    ->where('is_archived', false))
-                ->withCount([
-                    'services as active_services_count' => fn ($query) => $query
-                        ->where('is_active', true)
-                        ->where('is_archived', false),
-                ])
-                ->orderByDesc('monthly_queue_count')
-                ->orderByDesc('active_services_count')
-                ->orderBy('nama_instansi')
-                ->get();
-        }, 300);
+                    ->where('is_archived', false),
+            ])
+            ->orderByDesc('monthly_queue_count')
+            ->orderByDesc('active_services_count')
+            ->orderBy('nama_instansi')
+            ->get();
     }
 
     /**

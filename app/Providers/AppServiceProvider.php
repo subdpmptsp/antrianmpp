@@ -6,6 +6,7 @@ use App\Listeners\RecordAttendanceOnLogin;
 use App\Listeners\RecordAttendanceOnLogout;
 use App\Models\User;
 use App\Services\QueueService;
+use App\Services\ServiceQueueAvailabilityService;
 use App\Services\ThermalPrinterService;
 use App\Services\MppBrandingService;
 use Filament\Support\Assets\Js;
@@ -31,7 +32,9 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(QueueService::class, function ($app) {
-            return new QueueService;
+            return new QueueService(
+                $app->make(ServiceQueueAvailabilityService::class),
+            );
         });
 
         $this->app->singleton(MppBrandingService::class, function ($app) {

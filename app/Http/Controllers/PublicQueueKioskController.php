@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\QueueUnavailableException;
 use App\Models\Queue;
 use App\Models\Service;
 use App\Services\KioskCatalogService;
 use App\Services\MasterDataCache;
 use App\Services\QueueService;
+use App\Services\ServiceQueueAvailabilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -51,15 +53,20 @@ class PublicQueueKioskController extends Controller
             : collect();
 
         $services = $this->catalog->withDisdukcapilConsultationQueueCounts($services);
+        $this->attachQueueAvailability($services, app(ServiceQueueAvailabilityService::class));
 
-        return view('public.queue-kiosk', [
+        // Katalog kiosk berubah saat admin mengatur layanan/loket. Jangan biarkan
+        // browser memakai halaman lama karena dapat menyembunyikan instansi aktif.
+        return response()->view('public.queue-kiosk', [
             'selectedInstansi' => $selectedInstansi,
             'instansis' => $instansis,
             'popularInstansis' => $institutionColumns['popular'],
             'otherInstansis' => $institutionColumns['others'],
             'services' => $services,
             'queueRequestToken' => $queueRequestToken,
-        ]);
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0');
     }
 
     public function selectService(Request $request, int $serviceId, QueueService $queueService): JsonResponse
@@ -95,6 +102,8 @@ class PublicQueueKioskController extends Controller
             $queue = $queueService->reserveQueueForPrinting($service->id);
 
             return response()->json($this->printPayload($queue), 201);
+        } catch (QueueUnavailableException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
         } catch (\Throwable $exception) {
             Log::error('Gagal menyiapkan tiket kiosk publik.', [
                 'service_id' => $serviceId,
@@ -105,6 +114,15 @@ class PublicQueueKioskController extends Controller
                 'message' => 'Tiket gagal disiapkan. Silakan hubungi petugas.',
             ], 500);
         }
+    }
+
+    private function attachQueueAvailability($services, ServiceQueueAvailabilityService $availability): void
+    {
+        $services->each(function (Service $service) use ($availability): void {
+            $state = $availability->evaluate($service);
+            $service->setAttribute('queue_available', $state['available']);
+            $service->setAttribute('queue_unavailable_message', $state['message']);
+        });
     }
 
     private function printPayload(Queue $queue): array

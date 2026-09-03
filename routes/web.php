@@ -9,6 +9,7 @@ use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AudioController;
 use App\Http\Controllers\BarcodeController;
 use App\Http\Controllers\ExportController;
+use App\Http\Controllers\EventQueuePublicController;
 use App\Http\Controllers\PublicQueueKioskController;
 use App\Http\Controllers\QueuePrintController;
 use App\Http\Controllers\StrukController;
@@ -23,9 +24,46 @@ use Maatwebsite\Excel\Facades\Excel;
 
 Route::get('queue-status', QueueStatus::class)->name('queue.status');
 
+// Antrean Event berdiri sendiri dari antrean reguler: data, tiket, QR, dan TV-nya
+// hanya menggunakan tabel event_queue_* dan tidak pernah memanggil layanan Queue.
+Route::get('/event/{token}', [EventQueuePublicController::class, 'registration'])
+    ->name('event.registration');
+Route::post('/event/{token}/register', [EventQueuePublicController::class, 'register'])
+    ->middleware('throttle:10,1')
+    ->name('event.register');
+Route::get('/event/{token}/ticket/{ticket}', [EventQueuePublicController::class, 'ticket'])
+    ->name('event.ticket');
+Route::get('/event/{token}/ticket/{ticket}/download', [EventQueuePublicController::class, 'downloadTicket'])
+    ->name('event.ticket.download');
+Route::get('/event/{token}/ticket/{ticket}/calendar', [EventQueuePublicController::class, 'calendar'])
+    ->name('event.ticket.calendar');
+Route::get('/event/{token}/cek-tiket', [EventQueuePublicController::class, 'lookup'])
+    ->name('event.lookup');
+Route::post('/event/{token}/cek-tiket', [EventQueuePublicController::class, 'findTicket'])
+    ->middleware('throttle:10,1')
+    ->name('event.lookup.find');
+Route::get('/event/{token}/ticket/{ticket}/download', [EventQueuePublicController::class, 'downloadTicket'])
+    ->name('event.ticket.download');
+Route::get('/event/{token}/ticket/{ticket}/calendar', [EventQueuePublicController::class, 'calendar'])
+    ->name('event.ticket.calendar');
+Route::get('/event/{token}/cek-tiket', [EventQueuePublicController::class, 'lookup'])
+    ->name('event.lookup');
+Route::post('/event/{token}/cek-tiket', [EventQueuePublicController::class, 'findTicket'])
+    ->middleware('throttle:10,1')
+    ->name('event.lookup.find');
+Route::get('/event-tv/{token}', [EventQueuePublicController::class, 'tv'])
+    ->name('event.tv');
+Route::get('/api/event-tv/{token}', [EventQueuePublicController::class, 'tvStatus'])
+    ->middleware('throttle:60,1')
+    ->name('event.tv.status');
+
 Route::middleware(['auth', 'admin'])
     ->get('/exports/rekap-layanan', [ExportController::class, 'rekapLayanan'])
     ->name('export.rekap-layanan');
+
+Route::middleware(['auth', 'admin'])
+    ->get('/exports/event/{event}/peserta', [ExportController::class, 'eventParticipants'])
+    ->name('export.event-participants');
 
 Route::middleware(['auth', 'admin'])->get('/exports/monitoring-realtime', function (Request $request) {
     return Excel::download(

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\EventParticipantsExport;
+use App\Models\EventQueue;
 use Illuminate\Http\Request;
 use App\Exports\RekapLayananExport;
 use App\Models\AntrianSkck;
@@ -10,6 +12,18 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class ExportController extends Controller
 {
+    public function eventParticipants(Request $request, EventQueue $event)
+    {
+        $status = $request->string('status')->toString();
+        $validStatuses = ['all', 'registered', 'checked_in', 'serving', 'canceled'];
+        abort_unless(in_array($status ?: 'all', $validStatuses, true), 422);
+
+        return Excel::download(
+            new EventParticipantsExport($event, $status ?: 'all'),
+            'peserta-event-'.str($event->slug)->slug().'-'.now()->format('Y-m-d-His').'.xlsx',
+        );
+    }
+
 
     private $bulan = [
         1 => 'Januari',

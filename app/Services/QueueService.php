@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\QueueUnavailableException;
 use App\Models\Counter;
 use App\Models\Queue;
 use App\Models\Service;
@@ -10,6 +11,10 @@ use Illuminate\Support\Facades\DB;
 
 class QueueService
 {
+    public function __construct(
+        private readonly ServiceQueueAvailabilityService $availability,
+    ) {}
+
     public function addQueue(int $serviceId): Queue
     {
         return $this->createQueue($serviceId, Queue::STATUS_WAITING);
@@ -68,6 +73,8 @@ class QueueService
             $alternatingService = $this->lockAlternatingDisdukcapilConsultationService($requestedService);
 
             if ($alternatingService) {
+                $this->ensureAvailable($alternatingService);
+
                 return Queue::create([
                     'service_id' => $alternatingService->id,
                     'number' => $this->generateNumberForService($alternatingService),
@@ -81,6 +88,8 @@ class QueueService
                 ->where('is_accepting_queues', true)
                 ->lockForUpdate()
                 ->findOrFail($serviceId);
+
+            $this->ensureAvailable($service);
 
             // Services dengan prefix yang sama memakai satu urutan nomor.
             // Semua baris layanan tersebut dikunci dalam transaksi agar dua
@@ -98,6 +107,15 @@ class QueueService
                 'status' => $status,
             ]);
         });
+    }
+
+    private function ensureAvailable(Service $service): void
+    {
+        $availability = $this->availability->evaluate($service);
+
+        if (! $availability['available']) {
+            throw new QueueUnavailableException($availability['message']);
+        }
     }
 
     /**
