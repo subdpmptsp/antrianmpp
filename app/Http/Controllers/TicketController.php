@@ -13,14 +13,14 @@ class TicketController extends Controller
 {
     public function queuePdf(Queue $queue)
     {
-        $queue->load('service.instansi.counter');
+        $queue->load('service.instansi');
         $service = $queue->service;
         abort_unless($service, 404, 'Layanan tidak ditemukan.');
 
         // Build QR as data URI so DomPDF can embed it easily
         $payload = [
             'mall' => 'MALL PELAYANAN PUBLIK KOTA SURABAYA',
-            'zona' => $service->instansi?->counter?->name ?? 'Zona',
+            'zona' => $service->instansi?->zone ?? 'Zona',
             'loket' => $service?->instansi?->nama_instansi ?? '-',
             'layanan' => $service?->name ?? '-',
             'nomor' => $queue->number,

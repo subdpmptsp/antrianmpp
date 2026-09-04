@@ -16,7 +16,7 @@ class ServiceQueueDateOverrideResource extends Resource
     protected static ?string $model = ServiceQueueDateOverride::class;
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
     protected static ?string $navigationLabel = 'Jadwal Operasional';
-    protected static ?string $navigationGroup = 'Sistem';
+    protected static ?string $navigationGroup = 'Pengaturan';
     protected static ?string $modelLabel = 'Tanggal Khusus Antrean';
     protected static ?string $pluralModelLabel = 'Jadwal Operasional Antrean';
 

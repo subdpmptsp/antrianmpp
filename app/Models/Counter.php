@@ -30,6 +30,44 @@ class Counter extends Model
                 $builder->where('id', Auth::user()->counter_id);
             }
         });
+
+        static::saving(function (Counter $counter): void {
+            if (! $counter->instansi_id) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'instansi_id' => 'Loket wajib terhubung ke instansi.',
+                ]);
+            }
+
+            $instansi = Instansi::query()->find($counter->instansi_id);
+            if (! $instansi) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'instansi_id' => 'Instansi yang dipilih tidak ditemukan.',
+                ]);
+            }
+
+            if ($counter->is_active && ! $counter->is_archived && ! $counter->service_id) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'service_id' => 'Loket aktif wajib memiliki layanan utama.',
+                ]);
+            }
+
+            if ($counter->service_id) {
+                $serviceBelongsToInstitution = Service::query()
+                    ->whereKey($counter->service_id)
+                    ->where('instansi_id', $counter->instansi_id)
+                    ->exists();
+
+                if (! $serviceBelongsToInstitution) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'service_id' => 'Layanan harus berasal dari instansi yang sama dengan loket.',
+                    ]);
+                }
+            }
+
+            // name dipertahankan untuk kompatibilitas layar lama, tetapi sumber
+            // kebenaran zona sekarang berada pada instansi.
+            $counter->name = $instansi->zone;
+        });
     }
 
     // Relasi ke tabel Instansi
@@ -63,11 +101,6 @@ class Counter extends Model
             ->map(fn ($serviceId): int => (int) $serviceId)
             ->unique()
             ->values();
-    }
-
-    public function instansis()
-    {
-        return $this->hasMany(Instansi::class, 'counter_id', 'id');
     }
 
     // Relasi ke User (1:1)

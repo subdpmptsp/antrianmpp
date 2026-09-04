@@ -20,6 +20,11 @@ return new class extends Migration
                 ->whereIn('code_loket', ['Z1-16', 'Z1-17', 'Z1-18', 'Z1-19', 'Z1-20', 'Z1-21'])
                 ->pluck('id');
 
+            // Tidak ada master data produksi pada instalasi baru/test.
+            if ($services->isEmpty() && $counters->isEmpty()) {
+                return;
+            }
+
             if ($services->count() !== 4 || $counters->count() !== 6) {
                 throw new RuntimeException('Pengaturan tab layanan bersama Zona 1 dibatalkan karena data loket atau layanan tidak sesuai.');
             }

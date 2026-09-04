@@ -10,6 +10,11 @@ class ListInstansis extends ManageRecords
 {
     protected static string $resource = InstansiResource::class;
 
+    public function getSubheading(): ?string
+    {
+        return 'Langkah 1 dari 4. Buat instansi dan tentukan zonanya sebelum menambahkan layanan.';
+    }
+
     protected function getHeaderActions(): array
     {
         return [

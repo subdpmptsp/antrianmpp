@@ -18,7 +18,7 @@ class HolidayResource extends Resource
 
     protected static ?string $navigationLabel = 'Kalender Hari Libur';
 
-    protected static ?string $navigationGroup = 'Master Data';
+    protected static ?string $navigationGroup = 'Pengaturan';
 
     protected static ?string $modelLabel = 'Hari Libur';
 

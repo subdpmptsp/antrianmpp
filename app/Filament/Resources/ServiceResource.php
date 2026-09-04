@@ -14,30 +14,43 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class ServiceResource extends Resource
 {
     protected static ?string $model = Service::class;
 
-    protected static ?string $navigationLabel = 'Manajemen Layanan';
+    protected static ?string $navigationLabel = '2. Layanan Instansi';
 
     protected static ?string $Label = 'Layanan';
 
     protected static ?string $navigationIcon = 'heroicon-o-cog';
 
-    protected static ?string $navigationGroup = 'Master Data';
+    protected static ?string $navigationGroup = 'Struktur Layanan';
+
+    protected static ?int $navigationSort = 2;
 
     public static function canAccess(): bool
     {
         return auth()->user()?->can('access-admin-area') ?? false;
     }
 
+    public static function canDelete(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return false;
+    }
+
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
             ->where('is_archived', false)
-            ->with('instansi.counter');
+            ->with('instansi');
     }
 
     public static function form(Form $form): Form
@@ -46,7 +59,13 @@ class ServiceResource extends Resource
             ->schema([
                 Forms\Components\Select::make('instansi_id')
                     ->label('Instansi')
-                    ->relationship('instansi', 'nama_instansi')
+                    ->relationship(
+                        'instansi',
+                        'nama_instansi',
+                        modifyQueryUsing: fn (Builder $query): Builder => $query
+                            ->where('is_active', true)
+                            ->where('is_archived', false),
+                    )
                     ->helperText('Pilih instansi pemilik layanan. Zona mengikuti pengaturan instansi tersebut.')
                     ->searchable()
                     ->preload()
@@ -136,7 +155,7 @@ class ServiceResource extends Resource
                     ->description(function (Service $record): string {
                         $details = collect([
                             $record->instansi?->nama_instansi,
-                            $record->instansi?->counter?->name,
+                            $record->instansi?->zone,
                         ])->filter();
 
                         return $details->isNotEmpty()
@@ -174,8 +193,8 @@ class ServiceResource extends Resource
                         }
 
                         return $query->whereHas(
-                            'instansi.counter',
-                            fn (Builder $counterQuery): Builder => $counterQuery->where('name', $zoneName),
+                            'instansi',
+                            fn (Builder $instansiQuery): Builder => $instansiQuery->where('zone', $zoneName),
                         );
                     }),
                 Tables\Filters\SelectFilter::make('instansi_id')
@@ -188,13 +207,8 @@ class ServiceResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make()->label('Edit'),
-                Tables\Actions\DeleteAction::make()->label('Hapus'),
             ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
-            ]);
+            ->bulkActions([]);
     }
 
     public static function getPages(): array

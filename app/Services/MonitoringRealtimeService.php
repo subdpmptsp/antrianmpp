@@ -47,28 +47,20 @@ class MonitoringRealtimeService
             })
             ->values();
 
-        // Satu zona dapat memiliki banyak loket fisik. Kelompokkan semuanya
-        // berdasarkan nama zona agar kartu dan filter tetap tampil satu kali per zona.
-        $counterIdsByZoneName = Counter::withoutGlobalScopes()
-            ->whereIn('name', $zones->pluck('name'))
-            ->get(['id', 'name'])
-            ->groupBy('name')
-            ->map(fn (Collection $counters) => $counters->pluck('id')->values());
-
-        $zoneNumberByCounterId = $zones->flatMap(function (array $zone) use ($counterIdsByZoneName) {
-            return $counterIdsByZoneName
-                ->get($zone['name'], collect())
-                ->mapWithKeys(fn (int $counterId): array => [$counterId => $zone['zone_number']]);
-        });
-
         $servicesByZone = DB::table('services')
             ->join('instansis', 'instansis.instansi_id', '=', 'services.instansi_id')
-            ->whereIn('instansis.counter_id', $zoneNumberByCounterId->keys())
-            ->get(['services.id as service_id', 'instansis.counter_id'])
-            ->map(fn ($service) => [
-                'service_id' => $service->service_id,
-                'zone_number' => $zoneNumberByCounterId->get($service->counter_id),
-            ])
+            ->where('instansis.is_active', true)
+            ->where('instansis.is_archived', false)
+            ->whereIn('instansis.zone', $zones->pluck('name'))
+            ->get(['services.id as service_id', 'instansis.zone'])
+            ->map(function ($service) use ($zones): array {
+                $zone = $zones->firstWhere('name', $service->zone);
+
+                return [
+                    'service_id' => $service->service_id,
+                    'zone_number' => $zone['zone_number'] ?? null,
+                ];
+            })
             ->filter(fn (array $service): bool => $service['zone_number'] !== null)
             ->groupBy('zone_number');
 
@@ -150,13 +142,7 @@ class MonitoringRealtimeService
             ->where('is_archived', false)
             ->when(filled($zoneId), function ($q) use ($zoneId): void {
                 $zoneName = (string) config("tv.zones.{$zoneId}.name", "ZONA {$zoneId}");
-                $counterIds = Counter::withoutGlobalScopes()
-                    ->where('name', $zoneName)
-                    ->pluck('id');
-
-                $q->whereHas('instansi.counter', function ($query) use ($counterIds): void {
-                    $query->whereIn('id', $counterIds);
-                });
+                $q->whereHas('instansi', fn ($instansi) => $instansi->where('zone', $zoneName));
             })
             ->when(filled($search), fn ($q) => $q->where('name', 'like', '%'.$search.'%'))
             ->orderBy('name')

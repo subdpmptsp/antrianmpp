@@ -12,13 +12,13 @@ class ManageCounters extends ManageRecords
 
     public function getSubheading(): ?string
     {
-        return 'Halaman ini digunakan untuk mengatur loket fisik tempat petugas memanggil antrean. Tentukan zona, instansi, kode loket, layanan yang ditangani, dan status aktifnya.';
+        return 'Langkah 3 dari 4. Pilih instansi dan layanan utama. Zona loket otomatis mengikuti zona instansi.';
     }
 
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()->label('Tambah Loket'),
         ];
     }
 }

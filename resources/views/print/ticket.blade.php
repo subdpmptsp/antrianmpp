@@ -27,7 +27,7 @@
         <p class="institution">{{ $queue->service->instansi?->nama_instansi }}</p>
         <p class="service">{{ $queue->service->name }}</p>
         <div class="number">{{ $queue->number }}</div>
-        <p>{{ $queue->service->instansi?->counter?->name }}</p>
+        <p>{{ $queue->service->instansi?->zone }}</p>
         <hr>
         <p class="meta">{{ $queue->created_at->translatedFormat('d F Y') }} · {{ $queue->created_at->format('H:i:s') }}</p>
         <p>Mohon menunggu nomor Anda dipanggil.</p>

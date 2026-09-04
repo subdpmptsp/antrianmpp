@@ -68,7 +68,12 @@ class QueueKiosk extends Page
             ->where('instansi_id', $instansiId)
             ->where('is_active', true)
             ->where('is_archived', false)
-            ->whereHas('instansi.counter', fn ($query) => $query->where('is_active', true))
+            ->whereHas('instansi', fn ($query) => $query
+                ->where('is_active', true)
+                ->where('is_archived', false)
+                ->whereHas('counters', fn ($counter) => $counter
+                    ->where('is_active', true)
+                    ->where('is_archived', false)))
             ->orderBy('name')
             ->get();
 

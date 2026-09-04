@@ -17,15 +17,16 @@ class KioskCatalogService
     {
         return $this->cache->remember('kiosk:zones:v3', function (): array {
             $configuredZones = (array) config('tv.zones', []);
-            $counters = Counter::withoutGlobalScopes()
-                ->where('is_active', true)
-                ->orderBy('id')
-                ->get(['id', 'name']);
-            $resolvedCounters = collect($configuredZones)
-                ->map(fn (array $zone): ?Counter => $this->resolveCounter($zone, $counters));
-            $counterIds = $resolvedCounters->filter()->pluck('id')->unique()->values();
+            $counterByZone = Counter::withoutGlobalScopes()
+                ->join('instansis', 'instansis.instansi_id', '=', 'counters.instansi_id')
+                ->where('counters.is_active', true)
+                ->where('counters.is_archived', false)
+                ->selectRaw('instansis.zone, MIN(counters.id) as counter_id')
+                ->groupBy('instansis.zone')
+                ->pluck('counter_id', 'zone');
             $institutions = Instansi::query()
-                ->whereIn('counter_id', $counterIds)
+                ->where('is_active', true)
+                ->where('is_archived', false)
                 ->withCount([
                     'services as active_services_count' => fn ($query) => $query
                         ->where('is_active', true)
@@ -33,19 +34,19 @@ class KioskCatalogService
                 ])
                 ->orderBy('nama_instansi')
                 ->get()
-                ->groupBy('counter_id');
+                ->groupBy('zone');
             $zones = [];
 
             foreach ($configuredZones as $zoneNumber => $configuredZone) {
                 $zoneNumber = (int) $zoneNumber;
-                $counter = $resolvedCounters->get($zoneNumber);
-                $zoneInstitutions = $counter
-                    ? $institutions->get($counter->id, collect())
-                    : collect();
+                $zoneName = (string) ($configuredZone['name'] ?? "ZONA {$zoneNumber}");
+                $zoneInstitutions = $institutions->get($zoneName, collect());
 
                 $zones[$zoneNumber] = [
-                    'name' => $counter?->name ?? (string) ($configuredZone['name'] ?? "ZONA {$zoneNumber}"),
-                    'counter_id' => $counter?->id,
+                    'name' => $zoneName,
+                    // Dipertahankan untuk kompatibilitas URL TV lama. Zona tidak
+                    // lagi diturunkan dari counter ini.
+                    'counter_id' => $counterByZone->get($zoneName),
                     // Nama key dipertahankan agar view kiosk lama tetap kompatibel.
                     'services' => $zoneInstitutions->pluck('nama_instansi')->all(),
                     'institution_count' => $zoneInstitutions->count(),
@@ -84,8 +85,12 @@ class KioskCatalogService
         return Instansi::query()
             ->select('instansis.*')
             ->selectSub($usageQuery, 'monthly_queue_count')
-            ->whereNotNull('counter_id')
-            ->whereHas('counter', fn ($query) => $query->where('is_active', true))
+            ->where('is_active', true)
+            ->where('is_archived', false)
+            ->whereHas('counters', fn ($query) => $query
+                ->where('is_active', true)
+                ->where('is_archived', false)
+                ->whereNotNull('service_id'))
             ->whereHas('services', fn ($query) => $query
                 ->where('is_active', true)
                 ->where('is_archived', false))
@@ -178,22 +183,4 @@ class KioskCatalogService
         });
     }
 
-    private function resolveCounter(array $zone, Collection $counters): ?Counter
-    {
-        $configuredCounterId = filter_var($zone['counter_id'] ?? null, FILTER_VALIDATE_INT);
-
-        if ($configuredCounterId) {
-            $configuredCounter = $counters->firstWhere('id', $configuredCounterId);
-
-            if ($configuredCounter) {
-                return $configuredCounter;
-            }
-        }
-
-        $configuredName = mb_strtoupper((string) ($zone['name'] ?? ''));
-
-        return $counters->first(
-            fn (Counter $counter): bool => mb_strtoupper($counter->name) === $configuredName,
-        );
-    }
 }

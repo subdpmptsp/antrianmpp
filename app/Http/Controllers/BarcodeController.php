@@ -13,7 +13,7 @@ class BarcodeController extends Controller
     {
         $queue = $this->findQueue($request);
         $service = $queue->service;
-        $zona = $service->instansi?->counter?->name ?? 'Zona';
+        $zona = $service->instansi?->zone ?? 'Zona';
 
         $scanUrl = URL::temporarySignedRoute('barcode.scan', now()->endOfDay(), [
             'queue_id' => $queue->id,
@@ -46,7 +46,7 @@ class BarcodeController extends Controller
     {
         $queue = $this->findQueue($request);
         $service = $queue->service;
-        $zona = $service->instansi?->counter?->name ?? 'Zona';
+        $zona = $service->instansi?->zone ?? 'Zona';
 
         $pdfUrl = URL::temporarySignedRoute('struk.generate', now()->addMinutes(15), [
             'queue_id' => $queue->id,
@@ -71,7 +71,7 @@ class BarcodeController extends Controller
         abort_if($queueId < 1, 404, 'Data tidak ditemukan.');
 
         return Queue::query()
-            ->with('service.instansi.counter')
+            ->with('service.instansi')
             ->whereHas('service')
             ->findOrFail($queueId);
     }

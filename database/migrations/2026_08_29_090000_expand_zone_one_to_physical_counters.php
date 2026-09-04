@@ -38,6 +38,12 @@ return new class extends Migration
                 ->orderBy('c.id')
                 ->get(['c.id', 'c.instansi_id', 'c.service_id', 's.prefix']);
 
+            // Migrasi ini menata data produksi lama. Database baru/test tidak
+            // mempunyai dataset Zona 1 tersebut dan tidak perlu dipaksa memilikinya.
+            if ($existingCounters->isEmpty()) {
+                return;
+            }
+
             if ($existingCounters->count() !== 15) {
                 throw new RuntimeException('Penataan Zona 1 dibatalkan karena jumlah loket awal tidak sesuai audit (harus 15).');
             }

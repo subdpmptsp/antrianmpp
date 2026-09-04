@@ -50,6 +50,19 @@ class User extends Authenticatable implements FilamentUser
             if ($user->isDirty('password')) {
                 $user->password_changed_at = now();
             }
+
+            if ($user->role === self::ROLE_OPERATOR && $user->is_active && ! $user->counter_id) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'counter_id' => 'Akun petugas aktif wajib memiliki loket utama.',
+                ]);
+            }
+
+            if ($user->role === self::ROLE_OPERATOR && $user->counter_id) {
+                $counter = Counter::withoutGlobalScopes()->find($user->counter_id);
+                if ($counter) {
+                    $user->service_id = $counter->service_id;
+                }
+            }
         });
     }
 

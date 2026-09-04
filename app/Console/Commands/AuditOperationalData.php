@@ -23,8 +23,13 @@ class AuditOperationalData extends Command
             $failures,
         );
         $this->checkCount(
-            DB::table('users')->where('role', 'operator')->whereNull('counter_id')->count(),
-            'Operator tanpa loket',
+            DB::table('users')->where('role', 'operator')->where('is_active', true)->whereNull('counter_id')->count(),
+            'Operator aktif tanpa loket',
+            $failures,
+        );
+        $this->checkCount(
+            DB::table('instansis')->whereNull('zone')->count(),
+            'Instansi tanpa zona',
             $failures,
         );
         $this->checkCount(
@@ -34,11 +39,21 @@ class AuditOperationalData extends Command
         );
         $this->checkCount(
             DB::table('services')
-                ->leftJoin('counters', 'counters.service_id', '=', 'services.id')
                 ->where('services.is_active', true)
-                ->whereNull('counters.id')
+                ->where('services.is_archived', false)
+                ->whereNotExists(fn ($query) => $query
+                    ->selectRaw('1')
+                    ->from('counters')
+                    ->whereColumn('counters.service_id', 'services.id')
+                    ->where('counters.is_archived', false))
+                ->whereNotExists(fn ($query) => $query
+                    ->selectRaw('1')
+                    ->from('counter_service')
+                    ->join('counters', 'counters.id', '=', 'counter_service.counter_id')
+                    ->whereColumn('counter_service.service_id', 'services.id')
+                    ->where('counters.is_archived', false))
                 ->count(),
-            'Layanan aktif tanpa loket',
+            'Layanan aktif tanpa loket pemanggil',
             $failures,
         );
         $this->checkCount(
@@ -66,8 +81,20 @@ class AuditOperationalData extends Command
             $failures,
         );
         $this->checkCount(
-            DB::table('counter_service')->count(),
-            'Relasi pivot loket-layanan lama yang belum dibersihkan',
+            DB::table('counter_service')
+                ->join('counters', 'counters.id', '=', 'counter_service.counter_id')
+                ->join('services', 'services.id', '=', 'counter_service.service_id')
+                ->whereColumn('counters.instansi_id', '!=', 'services.instansi_id')
+                ->count(),
+            'Layanan tambahan berbeda instansi dengan loket',
+            $failures,
+        );
+        $this->checkCount(
+            DB::table('queues')
+                ->leftJoin('services', 'services.id', '=', 'queues.service_id')
+                ->whereNull('services.id')
+                ->count(),
+            'Riwayat antrean tanpa layanan',
             $failures,
         );
         $this->checkCount(

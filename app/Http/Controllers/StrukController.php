@@ -18,7 +18,7 @@ class StrukController extends Controller
         abort_if($queueId < 1, 404, 'Antrian tidak ditemukan.');
 
         $queue = Queue::query()
-            ->with('service.instansi.counter')
+            ->with('service.instansi')
             ->findOrFail($queueId);
         $service = $queue->service;
         abort_unless($service, 404, 'Layanan tidak ditemukan.');
@@ -27,7 +27,7 @@ class StrukController extends Controller
         $strukData = [
             'mall' => 'MALL PELAYANAN PUBLIK',
             'kota' => 'KOTA SURABAYA',
-            'zona' => $service->instansi?->counter?->name ?? 'Zona',
+            'zona' => $service->instansi?->zone ?? 'Zona',
             'loket' => $service->instansi?->nama_instansi ?? 'Loket',
             'layanan' => $service->name,
             'nomor' => $queue->number,
@@ -49,7 +49,7 @@ class StrukController extends Controller
 
     public function printTicket(Queue $queue)
     {
-        $queue->loadMissing('service.instansi.counter');
+        $queue->loadMissing('service.instansi');
         abort_unless($queue->service, 404, 'Layanan tidak ditemukan.');
 
         return response()
@@ -74,7 +74,7 @@ class StrukController extends Controller
         $strukData = [
             'mall' => 'MALL PELAYANAN PUBLIK',
             'kota' => 'KOTA SURABAYA',
-            'zona' => $service->instansi?->counter?->name ?? 'Zona',
+            'zona' => $service->instansi?->zone ?? 'Zona',
             'loket' => $service->instansi?->nama_instansi ?? 'Loket',
             'layanan' => $service->name,
             'nomor' => $queueNumber,

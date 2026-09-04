@@ -263,7 +263,7 @@ class DashboardCallKiosk extends Page
         $user = Auth::user();
 
         if ($user && $user->role === 'operator') {
-            $this->selectedZone = $user->counter?->name ?? $this->selectedZone;
+            $this->selectedZone = $user->counter?->instansi?->zone ?? $this->selectedZone;
             $this->selectedCounterId = $user->counter_id;
 
             return;
@@ -401,7 +401,7 @@ class DashboardCallKiosk extends Page
 
             // Dispatch event untuk suara pemanggilan dan tampilan TV
             $serviceName = $nextQueue->service ? $nextQueue->service->name : 'Layanan';
-            $zonaName = $this->selectedCounter->name; // Menggunakan counter.name sebagai zona
+            $zonaName = $this->selectedCounter->instansi?->zone ?? $this->selectedCounter->name;
             $servicePrefix = $nextQueue->service ? $nextQueue->service->prefix : 'A';
 
             $announcementData = [
@@ -463,7 +463,7 @@ class DashboardCallKiosk extends Page
 
         // Dispatch event untuk suara pemanggilan ulang
         $serviceName = $queue->service ? $queue->service->name : 'Layanan';
-        $zonaName = $this->selectedCounter->name; // Menggunakan counter.name sebagai zona
+        $zonaName = $this->selectedCounter->instansi?->zone ?? $this->selectedCounter->name;
         $servicePrefix = $queue->service ? $queue->service->prefix : 'A';
 
         $announcementData = [

@@ -46,7 +46,12 @@ class PublicQueueKioskController extends Controller
                     ->where('instansi_id', $selectedInstansi)
                     ->where('is_active', true)
                     ->where('is_archived', false)
-                    ->whereHas('instansi.counter', fn ($query) => $query->where('is_active', true))
+                    ->whereHas('instansi', fn ($query) => $query
+                        ->where('is_active', true)
+                        ->where('is_archived', false)
+                        ->whereHas('counters', fn ($counter) => $counter
+                            ->where('is_active', true)
+                            ->where('is_archived', false)))
                     ->orderBy('name')
                     ->get(),
             )
@@ -81,7 +86,7 @@ class PublicQueueKioskController extends Controller
         }
 
         $selectedInstansi = $request->integer('instansi_id');
-        $service = Service::query()->with('instansi.counter')->find($serviceId);
+        $service = Service::query()->with('instansi.counters')->find($serviceId);
 
         if (
             ! $service
@@ -89,8 +94,9 @@ class PublicQueueKioskController extends Controller
             || $service->is_archived
             || ! $service->is_accepting_queues
             || ! $service->instansi
-            || ! $service->instansi->counter_id
-            || ! $service->instansi->counter?->is_active
+            || ! $service->instansi->is_active
+            || $service->instansi->is_archived
+            || ! $service->instansi->counters->contains(fn ($counter): bool => $counter->is_active && ! $counter->is_archived)
             || (int) $service->instansi_id !== $selectedInstansi
         ) {
             return response()->json([

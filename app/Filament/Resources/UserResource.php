@@ -21,13 +21,13 @@ class UserResource extends Resource
 {
     protected static ?string $model = User::class;
 
-    protected static ?string $navigationLabel = 'Manajemen Pengguna';
+    protected static ?string $navigationLabel = '4. Pengguna & Peran';
 
     protected static ?string $Label = 'Pengguna';
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
 
-    protected static ?string $navigationGroup = 'Sistem';
+    protected static ?string $navigationGroup = 'Struktur Layanan';
 
     protected static ?int $navigationSort = 4;
 
@@ -53,8 +53,12 @@ class UserResource extends Resource
 
     public static function canDelete(Model $record): bool
     {
-        // Hanya admin yang bisa delete user
-        return static::canAccess();
+        return false;
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return false;
     }
 
     public static function form(Form $form): Form
@@ -96,23 +100,10 @@ class UserResource extends Resource
                     ->label('Akun Aktif')
                     ->default(true)
                     ->helperText('Akun nonaktif tidak dihitung dalam kehadiran.'),
-                Forms\Components\Select::make('service_id')
-                    ->label('Layanan')
-                    ->options(fn (): array => Service::query()
-                        ->where('is_active', true)
-                        ->where('is_archived', false)
-                        ->orderBy('prefix')
-                        ->get()
-                        ->mapWithKeys(fn (Service $service): array => [
-                            $service->id => $service->prefix.' — '.$service->name,
-                        ])
-                        ->all())
-                    ->visible(fn (Get $get) => $get('role') === 'operator')
-                    ->required(fn (Get $get) => $get('role') === 'operator')
-                    ->disabled(fn () => Auth::user()->role === 'operator'),
                 Forms\Components\Select::make('counter_id')
-                    ->label('Loket')
+                    ->label('Loket Utama')
                     ->options(fn (): array => Counter::withoutGlobalScopes()
+                        ->where('is_active', true)
                         ->where('is_archived', false)
                         ->orderBy('name')
                         ->orderBy('code_loket')
@@ -122,8 +113,24 @@ class UserResource extends Resource
                     ->visible(fn (Get $get) => $get('role') === 'operator')
                     ->required(fn (Get $get) => $get('role') === 'operator')
                     ->disabled(fn () => Auth::user()->role === 'operator')
+                    ->live()
+                    ->afterStateUpdated(fn ($state, callable $set) => $set(
+                        'service_id',
+                        Counter::withoutGlobalScopes()->find($state)?->service_id,
+                    ))
                     ->searchable()
                     ->preload(),
+                Forms\Components\Hidden::make('service_id'),
+                Forms\Components\Placeholder::make('layanan_loket')
+                    ->label('Layanan Utama')
+                    ->content(function (Get $get): string {
+                        $counter = Counter::withoutGlobalScopes()->with('service')->find($get('counter_id'));
+
+                        return $counter?->service
+                            ? $counter->service->prefix.' — '.$counter->service->name
+                            : 'Pilih loket utama terlebih dahulu.';
+                    })
+                    ->visible(fn (Get $get): bool => $get('role') === User::ROLE_OPERATOR),
             ]);
     }
 
@@ -146,7 +153,7 @@ class UserResource extends Resource
                     ->formatStateUsing(fn (?string $state, User $record): string => $record->role === 'admin' ? 'Akses seluruh panel' : ($state ?? '-'))
                     ->description(fn (User $record): string => $record->role === 'admin'
                         ? 'Administrator'
-                        : 'Loket: '.($record->counter?->name ?? '-'))
+                        : 'Loket: '.($record->counter?->display_name ?? '-').' · '.($record->counter?->instansi?->zone ?? '-'))
                     ->wrap(),
                 Tables\Columns\TextColumn::make('password_changed_at')
                     ->label('Rotasi Password')
@@ -177,7 +184,7 @@ class UserResource extends Resource
                             $scope->where('role', User::ROLE_ADMIN)
                                 ->orWhere(function (Builder $operators) use ($zoneName): void {
                                     $operators->where('role', User::ROLE_OPERATOR)
-                                        ->whereHas('counter', fn (Builder $counter) => $counter->where('name', $zoneName));
+                                        ->whereHas('counter.instansi', fn (Builder $instansi) => $instansi->where('zone', $zoneName));
                                 });
                         });
                     }),
@@ -186,17 +193,9 @@ class UserResource extends Resource
                 Tables\Actions\EditAction::make()
                     ->iconButton()
                     ->tooltip('Edit pengguna'),
-                Tables\Actions\DeleteAction::make()
-                    ->iconButton()
-                    ->tooltip('Hapus pengguna')
-                    ->visible(fn (User $record) => $record->role !== 'admin'),
             ])
             ->actionsColumnLabel('Aksi')
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
-            ]);
+            ->bulkActions([]);
     }
 
     public static function getPages(): array

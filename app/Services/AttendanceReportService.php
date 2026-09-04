@@ -22,7 +22,7 @@ class AttendanceReportService
         return User::query()
             ->where('role', User::ROLE_OPERATOR)
             ->where('is_active', true)
-            ->with(['service.instansi.counter', 'counter.instansi.counter'])
+            ->with(['service.instansi', 'counter.instansi'])
             ->orderBy('name')
             ->get();
     }
@@ -56,7 +56,7 @@ class AttendanceReportService
             };
 
             $zoneId = collect(config('tv.zones', []))
-                ->search(fn (array $zone): bool => ($zone['name'] ?? null) === $instansi?->counter?->name);
+                ->search(fn (array $zone): bool => ($zone['name'] ?? null) === $instansi?->zone);
 
             return [
                 'user_id' => $operator->id,

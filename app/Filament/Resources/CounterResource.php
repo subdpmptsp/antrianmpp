@@ -7,8 +7,10 @@ use App\Models\Counter;
 use App\Models\Instansi;
 use App\Models\Service;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Get;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -21,13 +23,15 @@ class CounterResource extends Resource
 {
     protected static ?string $model = Counter::class;
 
-    protected static ?string $navigationLabel = 'Manajemen Loket';
+    protected static ?string $navigationLabel = '3. Loket Pelayanan';
 
     protected static ?string $Label = 'Loket';
 
     protected static ?string $navigationIcon = 'heroicon-o-building-storefront';
 
-    protected static ?string $navigationGroup = 'Master Data';
+    protected static ?string $navigationGroup = 'Struktur Layanan';
+
+    protected static ?int $navigationSort = 3;
 
     public static function canAccess(): bool
     {
@@ -46,7 +50,12 @@ class CounterResource extends Resource
 
     public static function canDelete(Model $record): bool
     {
-        return static::canAccess();
+        return false;
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return false;
     }
 
     public static function getEloquentQuery(): Builder
@@ -60,16 +69,15 @@ class CounterResource extends Resource
     {
         return $form
             ->schema([
-                Select::make('name')
-                    ->label('Zona')
-                    ->options(fn (): array => collect(config('tv.zones', []))
-                        ->mapWithKeys(fn (array $zone): array => [$zone['name'] => $zone['name']])
-                        ->all())
-                    ->required(),
-
                 Select::make('instansi_id')
                     ->label('Instansi')
-                    ->relationship('instansi', 'nama_instansi')
+                    ->relationship(
+                        'instansi',
+                        'nama_instansi',
+                        modifyQueryUsing: fn (Builder $query): Builder => $query
+                            ->where('is_active', true)
+                            ->where('is_archived', false),
+                    )
                     ->searchable()
                     ->preload()
                     ->required()
@@ -77,7 +85,14 @@ class CounterResource extends Resource
                     ->afterStateUpdated(function ($state, callable $set) {
                         // Reset service when instansi changes
                         $set('service_id', null);
+                        $set('name', Instansi::find($state)?->zone);
                     }),
+
+                \Filament\Forms\Components\Hidden::make('name'),
+
+                Placeholder::make('zona_instansi')
+                    ->label('Zona Pelayanan')
+                    ->content(fn (\Filament\Forms\Get $get): string => Instansi::find($get('instansi_id'))?->zone ?? 'Pilih instansi terlebih dahulu.'),
 
                 TextInput::make('code_loket')
                     ->label('Kode Loket')
@@ -112,7 +127,11 @@ class CounterResource extends Resource
                     ->relationship(
                         'additionalServices',
                         'name',
-                        fn (Builder $query): Builder => $query
+                        fn (Builder $query, Get $get): Builder => $query
+                            ->when(
+                                $get('instansi_id'),
+                                fn (Builder $serviceQuery, int|string $instansiId): Builder => $serviceQuery->where('instansi_id', $instansiId),
+                            )
                             ->where('is_active', true)
                             ->where('is_archived', false)
                             ->with('instansi')
@@ -124,7 +143,7 @@ class CounterResource extends Resource
                         $service->prefix.' — '.$service->name,
                         $service->instansi?->nama_instansi,
                     ])->filter()->implode(' · '))
-                    ->helperText('Ketik nama layanan atau kode untuk mencari. Hasil dimuat saat dicari, maksimal 20 layanan.'),
+                    ->helperText('Layanan tambahan wajib berasal dari instansi yang sama. Ketik nama atau kode untuk mencari.'),
 
                 Toggle::make('is_active')
                     ->label('Status Aktif')
@@ -170,11 +189,8 @@ class CounterResource extends Resource
             ->filters([
                 SelectFilter::make('zona')
                     ->label('Zona')
-                    ->options(fn (): array => Counter::withoutGlobalScopes()
-                        ->whereNotNull('name')
-                        ->where('name', '!=', '')
-                        ->orderBy('name')
-                        ->pluck('name', 'name')
+                    ->options(fn (): array => collect(config('tv.zones', []))
+                        ->mapWithKeys(fn (array $zone): array => [$zone['name'] => $zone['name']])
                         ->all())
                     ->query(function (Builder $query, array $data): Builder {
                         $zoneName = $data['value'] ?? null;
@@ -183,7 +199,7 @@ class CounterResource extends Resource
                             return $query;
                         }
 
-                        return $query->where('name', $zoneName);
+                        return $query->whereHas('instansi', fn (Builder $instansi): Builder => $instansi->where('zone', $zoneName));
                     })
                     ->placeholder('Semua zona'),
                 SelectFilter::make('instansi_id')
@@ -196,13 +212,8 @@ class CounterResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make()->label('Edit'),
-                Tables\Actions\DeleteAction::make()->label('Hapus'),
             ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
-            ]);
+            ->bulkActions([]);
     }
 
     public static function getPages(): array

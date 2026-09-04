@@ -10,10 +10,15 @@ class ManageUsers extends ManageRecords
 {
     protected static string $resource = UserResource::class;
 
+    public function getSubheading(): ?string
+    {
+        return 'Langkah 4 dari 4. Akun petugas aktif wajib memiliki loket utama; layanan mengikuti penugasan loket.';
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()->label('Tambah Pengguna'),
         ];
     }
 }

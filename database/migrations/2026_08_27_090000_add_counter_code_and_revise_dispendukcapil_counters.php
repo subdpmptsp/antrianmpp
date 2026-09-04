@@ -18,6 +18,13 @@ return new class extends Migration
 
         DB::transaction(function (): void {
             $instansiId = 8; // Dinas Kependudukan dan Pencatatan Sipil.
+
+            // Database baru/test belum tentu mempunyai master data produksi dengan ID 8.
+            // Pada kondisi tersebut cukup pasang struktur kolomnya dan lewati migrasi data.
+            if (! DB::table('instansis')->where('instansi_id', $instansiId)->exists()) {
+                return;
+            }
+
             $legacyServiceIds = DB::table('services')
                 ->where('instansi_id', $instansiId)
                 ->pluck('id');

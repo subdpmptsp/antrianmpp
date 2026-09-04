@@ -129,8 +129,8 @@ class TvDisplayController extends Controller
         }
 
         // Get services for this zone
-        $services = Service::whereHas('instansi', function ($query) use ($zoneId) {
-            $query->where('counter_id', $zoneId);
+        $services = Service::whereHas('instansi', function ($query) use ($zoneCounter) {
+            $query->where('zone', $zoneCounter->instansi?->zone ?? $zoneCounter->name);
         })
             ->where('is_active', true)
             ->where('is_archived', false)
@@ -170,7 +170,7 @@ class TvDisplayController extends Controller
             });
 
         return response()->json([
-            'zone_name' => $zoneCounter->name,
+            'zone_name' => $zoneCounter->instansi?->zone ?? $zoneCounter->name,
             'services' => $services,
             'timestamp' => now()->toISOString(),
         ]);
@@ -188,10 +188,8 @@ class TvDisplayController extends Controller
         }
 
         // Get all counters for this zone
-        $zoneCounters = Counter::where(function ($query) use ($zoneId, $zoneCounter) {
-            $query->where('id', $zoneId)
-                ->orWhere('name', 'like', $zoneCounter->name.'%');
-        })
+        $zoneName = $zoneCounter->instansi?->zone ?? $zoneCounter->name;
+        $zoneCounters = Counter::whereHas('instansi', fn ($query) => $query->where('zone', $zoneName))
             ->where('is_active', true)
             ->where('is_archived', false)
             ->get();
@@ -231,7 +229,7 @@ class TvDisplayController extends Controller
         })->values();
 
         return response()->json([
-            'zone_name' => $zoneCounter->name,
+            'zone_name' => $zoneName,
             'queues' => $queues,
             'timestamp' => now()->toISOString(),
         ]);

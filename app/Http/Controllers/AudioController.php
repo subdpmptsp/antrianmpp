@@ -31,7 +31,7 @@ class AudioController extends Controller
         }
 
         $query = Queue::query()
-            ->with('service.instansi.counter')
+            ->with('service.instansi')
             ->whereIn('status', Queue::ACTIVE_STATUSES)
             ->whereDate('created_at', now()->toDateString());
 
@@ -44,7 +44,7 @@ class AudioController extends Controller
         abort_unless($service, 404, 'Layanan tidak ditemukan.');
 
         $counterName = $queue->counter?->display_name ?? 'Loket';
-        $zona = $service->instansi?->counter?->name ?? 'Zona';
+        $zona = $service->instansi?->zone ?? 'Zona';
         $text = "Nomor antrian {$queue->number}, layanan {$service->name}, menuju ke loket {$counterName}, {$zona}. Terima kasih.";
         $audioUrl = $audioService->generateAudioUrl($text, config('audio.default_service', 'default'));
 

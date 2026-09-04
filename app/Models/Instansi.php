@@ -17,22 +17,35 @@ class Instansi extends Model
 
     protected $keyType = 'int';
 
-    protected $fillable = ['nama_instansi', 'work_days_per_week', 'deskripsi', 'logo_path', 'counter_id'];
+    protected $fillable = [
+        'nama_instansi', 'zone', 'is_active', 'is_archived',
+        'work_days_per_week', 'deskripsi', 'logo_path',
+    ];
 
     protected function casts(): array
     {
         return [
             'work_days_per_week' => 'integer',
+            'is_active' => 'boolean',
+            'is_archived' => 'boolean',
         ];
     }
 
-    public function counter()
+    public function counters()
     {
-        return $this->belongsTo(Counter::class, 'counter_id', 'id');
+        return $this->hasMany(Counter::class, 'instansi_id', 'instansi_id');
     }
 
     public function services()
     {
         return $this->hasMany(Service::class, 'instansi_id', 'instansi_id');
+    }
+
+    public function getZoneNumberAttribute(): ?int
+    {
+        $zoneId = collect(config('tv.zones', []))
+            ->search(fn (array $zone): bool => mb_strtoupper((string) ($zone['name'] ?? '')) === mb_strtoupper($this->zone));
+
+        return $zoneId === false ? null : (int) $zoneId;
     }
 }

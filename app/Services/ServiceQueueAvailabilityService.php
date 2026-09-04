@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Holiday;
+use App\Models\Counter;
 use App\Models\Queue;
 use App\Models\QueueOperatingSetting;
 use App\Models\Service;
@@ -20,13 +21,27 @@ class ServiceQueueAvailabilityService
             return $this->closed('Layanan ini sedang tidak menerima nomor antrean.', 'service_closed');
         }
 
+        $service->loadMissing('instansi');
+        if (! $service->instansi || ! $service->instansi->is_active || $service->instansi->is_archived) {
+            return $this->closed('Instansi layanan ini sedang tidak aktif.', 'institution_closed');
+        }
+
         $settings = QueueOperatingSetting::query()->first();
         $globalSchedule = (array) ($settings?->weekly_schedule ?? []);
-        $counters = $service->counters()
+        $counters = Counter::withoutGlobalScopes()
+            ->where('instansi_id', $service->instansi_id)
             ->where('is_active', true)
             ->where('is_archived', false)
+            ->where(function ($query) use ($service): void {
+                $query->where('service_id', $service->id)
+                    ->orWhereHas('additionalServices', fn ($additional) => $additional->whereKey($service->id));
+            })
             ->with('queueScheduleOverride')
             ->get();
+
+        if ($counters->isEmpty()) {
+            return $this->closed('Belum ada loket aktif untuk layanan ini.', 'counter_unavailable');
+        }
 
         $activeOverrides = $counters->map(fn ($counter) => $counter->queueScheduleOverride)
             ->filter(fn ($override) => $override && (! $override->valid_until || $override->valid_until->greaterThanOrEqualTo($now)));

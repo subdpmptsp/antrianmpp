@@ -167,7 +167,15 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
         $to = Carbon::parse($this->to)->endOfDay();
 
         return \App\Models\Instansi::query()
-            ->whereIn('counter_id', $this->counterIdsForZone($this->reportZoneFilter))
+            ->when(
+                $this->reportZoneFilter !== 'all',
+                fn ($query) => $query->where('zone', (string) config(
+                    "tv.zones.{$this->reportZoneFilter}.name",
+                    "ZONA {$this->reportZoneFilter}",
+                )),
+            )
+            ->where('is_active', true)
+            ->where('is_archived', false)
             ->whereHas('services', fn ($query) => $query->where('is_active', true)->where('is_archived', false))
             ->with(['services' => function ($query) use ($from, $to): void {
                 $query->where('is_active', true)->where('is_archived', false)->withCount([

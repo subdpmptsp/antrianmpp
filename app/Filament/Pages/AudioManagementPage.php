@@ -27,7 +27,7 @@ class AudioManagementPage extends Page implements HasForms, HasActions
     protected static string $view = 'filament.pages.audio-management';
     protected static ?string $title = 'Manajemen Audio';
     protected static ?string $navigationLabel = 'Manajemen Audio';
-    protected static ?string $navigationGroup = 'Sistem';
+    protected static ?string $navigationGroup = 'Pengaturan';
     protected static ?int $navigationSort = 10;
     
     public static function canAccess(): bool

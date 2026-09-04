@@ -64,10 +64,10 @@ class AdminPanelProvider extends PanelProvider
             ->spa()
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->navigationGroups([
+                'Struktur Layanan',
                 'Operasional',
-                'Master Data',
                 'Monitoring',
-                'Sistem',
+                'Pengaturan',
             ]);
     }
 }

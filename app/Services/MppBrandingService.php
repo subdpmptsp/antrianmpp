@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Setting;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 class MppBrandingService
@@ -18,7 +19,9 @@ class MppBrandingService
     public function current(): array
     {
         return Cache::rememberForever(self::CACHE_KEY, function (): array {
-            $setting = Setting::query()->first();
+            // Panel provider juga berjalan saat database baru belum dimigrasikan
+            // (misalnya test/fresh install), jadi branding harus aman tanpa tabel.
+            $setting = Schema::hasTable('settings') ? Setting::query()->first() : null;
 
             return [
                 'name' => $setting?->name ?: 'Mal Pelayanan Publik Siola',

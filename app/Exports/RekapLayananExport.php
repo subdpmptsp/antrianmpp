@@ -43,8 +43,7 @@ class RekapLayananExport implements FromCollection, ShouldAutoSize, WithEvents, 
             ->where('s.is_archived', false)
             ->when($this->zoneId && $this->zoneId !== 'all', function ($query): void {
                 $zoneName = (string) config("tv.zones.{$this->zoneId}.name", "ZONA {$this->zoneId}");
-                $counterIds = DB::table('counters')->where('name', $zoneName)->pluck('id');
-                $query->whereIn('i.counter_id', $counterIds);
+                $query->where('i.zone', $zoneName);
             })
             ->select(['s.id', 's.prefix', 's.name as service_name', 'i.instansi_id', 'i.nama_instansi'])
             ->orderBy('i.nama_instansi')

@@ -13,7 +13,7 @@ class TestPrintPage extends Page
 
     protected static ?string $navigationLabel = 'Test Print';
 
-    protected static ?string $navigationGroup = 'Sistem';
+    protected static ?string $navigationGroup = 'Pengaturan';
 
     protected static ?string $navigationIcon = 'heroicon-o-printer';
 

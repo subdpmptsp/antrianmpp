@@ -18,7 +18,7 @@ class QueueOperatingSchedule extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-clock';
     protected static ?string $navigationLabel = 'Jadwal Operasional Antrean';
-    protected static ?string $navigationGroup = 'Sistem';
+    protected static ?string $navigationGroup = 'Pengaturan';
     protected static ?int $navigationSort = 2;
     protected static string $view = 'filament.pages.queue-operating-schedule';
 

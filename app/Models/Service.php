@@ -12,7 +12,7 @@ class Service extends Model
     protected $table = 'services';
 
     protected $fillable = [
-        'instansi_id', 'name', 'prefix', 'padding', 'counter_id', 'is_active', 'is_accepting_queues', 'is_archived',
+        'instansi_id', 'name', 'prefix', 'padding', 'is_active', 'is_accepting_queues', 'is_archived',
         'queue_schedule', 'daily_queue_quota', 'queue_override', 'queue_override_reason', 'queue_override_until',
     ];
 
@@ -34,6 +34,14 @@ class Service extends Model
         static::creating(function (Service $service): void {
             if ($service->padding === null || (int) $service->padding <= 0) {
                 $service->padding = 2;
+            }
+        });
+
+        static::saving(function (Service $service): void {
+            if (! $service->instansi_id) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'instansi_id' => 'Layanan wajib terhubung ke instansi.',
+                ]);
             }
         });
 
