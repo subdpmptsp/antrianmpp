@@ -10,12 +10,14 @@
         type="button"
         class="queue-kiosk__institution-card queue-kiosk__institution-card--{{ $cardVariant }}"
         data-kiosk-institution-card
+        data-kiosk-navigation
         wire:click="selectInstansi({{ (int) $instansi->instansi_id }})"
     >
 @else
     <a
         class="queue-kiosk__institution-card queue-kiosk__institution-card--{{ $cardVariant }}"
         data-kiosk-institution-card
+        data-kiosk-navigation
         href="{{ route('public.queue-kiosk', ['instansi' => $instansi->instansi_id]) }}"
     >
 @endif

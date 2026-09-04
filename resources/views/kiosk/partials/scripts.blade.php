@@ -44,6 +44,42 @@
         let processing = false
         let idleTimer = null
 
+        // Navigasi antar langkah kiosk dilakukan tanpa memuat ulang dokumen.
+        // Ini penting untuk Edge/Chrome: fullscreen browser dilepas jika terjadi
+        // navigasi halaman penuh, sedangkan penggantian konten tetap berada di
+        // gesture fullscreen yang sama.
+        const navigateWithinKiosk = async (url, pushHistory = true) => {
+            if (!url) return
+
+            try {
+                setLoading(true)
+                const response = await fetch(url, {
+                    credentials: 'same-origin',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'text/html' },
+                })
+                if (!response.ok) throw new Error('Halaman kiosk tidak dapat dimuat.')
+
+                const html = await response.text()
+                const documentFragment = new DOMParser().parseFromString(html, 'text/html')
+                const nextRoot = documentFragment.querySelector('[data-kiosk-root]')
+                const nextContent = nextRoot?.querySelector('.queue-kiosk__content')
+                const currentContent = root.querySelector('.queue-kiosk__content')
+                if (!nextContent || !currentContent) throw new Error('Konten kiosk tidak lengkap.')
+
+                currentContent.replaceWith(nextContent)
+                root.dataset.step = nextRoot.dataset.step || '1'
+                if (pushHistory) window.history.pushState({ kiosk: true }, '', url)
+                initializeKiosk()
+            } catch (error) {
+                // Fallback hanya bila request AJAX gagal; pada kondisi normal
+                // fullscreen tidak pernah meninggalkan dokumen.
+                window.location.assign(url)
+            } finally {
+                setLoading(false)
+            }
+        }
+        window.__queueKioskNavigate = navigateWithinKiosk
+
         if (sizePreview) {
             const cssVariables = {
                 popular: '--kiosk-popular-height',
@@ -82,7 +118,7 @@
                 return
             }
 
-            window.location.replace(root.dataset.homeUrl)
+            await navigateWithinKiosk(root.dataset.homeUrl)
         }
 
         const showError = (message) => {
@@ -174,6 +210,13 @@
         })
 
         root.querySelector('[data-kiosk-error-home]')?.addEventListener('click', goHome, { signal })
+        root.querySelectorAll('[data-kiosk-navigation]').forEach((link) => {
+            link.addEventListener('click', (event) => {
+                if (root.dataset.mode !== 'public') return
+                event.preventDefault()
+                navigateWithinKiosk(link.href)
+            }, { signal })
+        })
         root.querySelector('[data-kiosk-fullscreen]')?.addEventListener('click', async () => {
             if (!document.fullscreenElement) await document.documentElement.requestFullscreen?.()
             else await document.exitFullscreen?.()
@@ -217,5 +260,14 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initializeKiosk, { once: true })
     else initializeKiosk()
     document.addEventListener('livewire:navigated', initializeKiosk)
+    window.history.replaceState({ kiosk: true }, '', window.location.href)
+    window.addEventListener('popstate', () => {
+        const root = document.querySelector('[data-kiosk-root]')
+        if (root?.dataset.mode === 'public') {
+            const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`
+            // Re-fetch the current step while keeping the browser fullscreen.
+            if (currentUrl) window.__queueKioskNavigate?.(currentUrl, false)
+        }
+    })
 })()
 </script>
