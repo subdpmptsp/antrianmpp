@@ -53,9 +53,48 @@
         }
 
         .operator-logout:hover { background: #f8fafc; border-color: #94a3b8; }
+
+        .admin-sidebar-return {
+            position: fixed;
+            z-index: 1000;
+            top: .75rem;
+            left: .75rem;
+            display: inline-flex;
+            align-items: center;
+            gap: .45rem;
+            min-height: 42px;
+            padding: .55rem .75rem;
+            border: 1px solid #c9d8ec;
+            border-radius: .7rem;
+            background: #fff;
+            color: #174a8c;
+            box-shadow: 0 6px 18px rgba(15, 55, 110, .12);
+            font-size: .8rem;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .admin-sidebar-return:hover { background: #edf5ff; color: #0b4fa7; }
+        .admin-sidebar-return span:first-child { font-size: 1.15rem; line-height: 1; }
+
+        @media (max-width: 640px) {
+            .admin-sidebar-return { top: .55rem; left: .55rem; }
+            .admin-sidebar-return span:last-child { display: none; }
+        }
     </style>
 </head>
 <body class="min-h-screen bg-slate-50 font-sans antialiased">
+    @if (auth()->user()?->isAdmin())
+        <a
+            href="{{ route('filament.admin.pages.monitoring-dashboard') }}"
+            class="admin-sidebar-return"
+            aria-label="Kembali ke panel admin dan buka sidebar"
+            title="Buka sidebar panel admin"
+        >
+            <span aria-hidden="true">←</span>
+            <span>Panel Admin</span>
+        </a>
+    @endif
     <header class="operator-shell-header">
         <form method="POST" action="{{ route('filament.admin.auth.logout') }}">
             @csrf
