@@ -21,18 +21,14 @@ class BladeQueryPerformanceTest extends TestCase
         $this->actingAs($admin);
 
         foreach (range(1, 12) as $index) {
-            $counter = Counter::query()->create([
-                'name' => "LOKET {$index}",
-                'is_active' => true,
-            ]);
-            $service = Service::query()->create([
+            $institution = $this->createTestInstitution("INSTANSI {$index}", 'ZONA 1');
+            $service = $this->createTestService($institution, [
                 'name' => "LAYANAN {$index}",
                 'prefix' => "Q{$index}",
                 'padding' => 3,
-                'counter_id' => $counter->id,
                 'is_active' => true,
             ]);
-            $counter->update(['service_id' => $service->id]);
+            $this->createTestCounter($institution, $service, ['code_loket' => "LOKET {$index}"]);
             Queue::query()->create([
                 'service_id' => $service->id,
                 'number' => "Q{$index}-001",
@@ -65,7 +61,9 @@ class BladeQueryPerformanceTest extends TestCase
 
             $path = $file->getPathname();
             $contents = file_get_contents($path);
-            $this->assertStringNotContainsString('\\App\\Models\\', $contents, $path);
+            foreach (['::query(', '::where(', '::find(', '::all('] as $queryPattern) {
+                $this->assertStringNotContainsString($queryPattern, $contents, $path);
+            }
         }
     }
 }

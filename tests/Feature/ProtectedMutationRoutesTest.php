@@ -36,14 +36,15 @@ class ProtectedMutationRoutesTest extends TestCase
 
     public function test_operator_can_only_generate_audio_for_queue_at_assigned_counter(): void
     {
-        $assignedCounter = Counter::query()->create(['name' => 'LOKET OPERATOR', 'is_active' => true]);
-        $otherCounter = Counter::query()->create(['name' => 'LOKET LAIN', 'is_active' => true]);
-        $service = Service::query()->create([
+        $institution = $this->createTestInstitution('INSTANSI AUDIO', 'ZONA 1');
+        $service = $this->createTestService($institution, [
             'name' => 'LAYANAN AUDIO',
             'prefix' => 'A',
             'padding' => 3,
             'is_active' => true,
         ]);
+        $assignedCounter = $this->createTestCounter($institution, $service, ['code_loket' => 'LOKET OPERATOR']);
+        $otherCounter = $this->createTestCounter($institution, $service, ['code_loket' => 'LOKET LAIN']);
         $ownQueue = Queue::query()->create([
             'counter_id' => $assignedCounter->id,
             'service_id' => $service->id,

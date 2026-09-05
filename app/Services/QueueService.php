@@ -182,6 +182,10 @@ class QueueService
         $lastQueue = Queue::whereIn('service_id', $serviceIds)
             ->whereDate('created_at', now()->toDateString())
             ->orderByDesc('id')
+            // Consistent reads in MySQL can otherwise keep an old snapshot
+            // after another kiosk has committed its ticket. A locking read
+            // waits for that transaction and then sees the latest number.
+            ->lockForUpdate()
             ->first();
 
         $lastQueueNumber = $lastQueue ? intval(

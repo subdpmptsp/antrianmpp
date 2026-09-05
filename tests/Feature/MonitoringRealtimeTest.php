@@ -36,26 +36,19 @@ class MonitoringRealtimeTest extends TestCase
     {
         foreach (range(0, 4) as $zoneIndex) {
             $zoneName = 'ZONA ' . ($zoneIndex + 1);
-            $zone = Counter::query()->create(['name' => $zoneName, 'is_active' => true]);
-
-            for ($counterIndex = 1; $counterIndex <= 6; $counterIndex++) {
-                Counter::query()->create([
-                    'name' => $zoneName,
-                    'is_active' => true,
-                ]);
-            }
-
-            $instansi = Instansi::query()->create([
-                'nama_instansi' => "INSTANSI {$zoneIndex}",
-                'counter_id' => $zone->id,
-            ]);
-            $service = Service::query()->create([
+            $instansi = $this->createTestInstitution("INSTANSI {$zoneIndex}", $zoneName);
+            $service = $this->createTestService($instansi, [
                 'name' => "LAYANAN {$zoneIndex}",
                 'prefix' => "M{$zoneIndex}",
                 'padding' => 3,
                 'instansi_id' => $instansi->instansi_id,
                 'is_active' => true,
             ]);
+            for ($counterIndex = 1; $counterIndex <= 7; $counterIndex++) {
+                $this->createTestCounter($instansi, $service, [
+                    'code_loket' => "{$zoneIndex}-{$counterIndex}",
+                ]);
+            }
             Queue::query()->create([
                 'service_id' => $service->id,
                 'number' => "M{$zoneIndex}-001",
@@ -70,7 +63,7 @@ class MonitoringRealtimeTest extends TestCase
         $summary = $service->getSummary();
         $zones = $service->getZones();
         $services = $service->getServices();
-        $options = $service->getInstansiOptions();
+        $options = $service->getZoneOptions();
         $queryCount = count(DB::getQueryLog());
 
         DB::disableQueryLog();

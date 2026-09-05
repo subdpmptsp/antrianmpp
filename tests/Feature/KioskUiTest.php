@@ -6,6 +6,7 @@ use App\Filament\Pages\QueueKiosk;
 use App\Models\Counter;
 use App\Models\Instansi;
 use App\Models\Queue;
+use App\Models\QueueOperatingSetting;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\KioskCatalogService;
@@ -23,6 +24,15 @@ class KioskUiTest extends TestCase
         parent::setUp();
 
         $this->seed(TestingSeeder::class);
+        QueueOperatingSetting::query()->update([
+            'weekly_schedule' => collect(range(1, 7))->map(fn (int $day) => [
+                'day' => $day,
+                'is_open' => true,
+                'opens_at' => '00:00',
+                'closes_at' => '23:59',
+            ])->all(),
+            'cutoff_minutes' => 0,
+        ]);
     }
 
     public function test_kiosk_starts_with_institution_selection_without_zone_or_confirmation(): void
@@ -71,9 +81,9 @@ class KioskUiTest extends TestCase
         $this->get(route('public.queue-kiosk', ['instansi' => $institution->instansi_id]))
             ->assertOk()
             ->assertSee('Pilih layanan yang dibutuhkan')
-            ->assertSee('Tiket akan langsung dicetak setelah layanan disentuh')
+            ->assertSee('Tiket akan langsung dicetak setelah layanan disentuh.')
             ->assertSee($service->name)
-            ->assertSee('Sentuh untuk mencetak tiket')
+            ->assertSee('Belum ada antrean menunggu')
             ->assertSee(route('public.queue-kiosk.select-service', $service), false)
             ->assertSee('queue_request_token', false)
             ->assertSee('instansi_id', false)
@@ -82,10 +92,10 @@ class KioskUiTest extends TestCase
 
     public function test_institution_without_active_service_is_hidden_from_kiosk(): void
     {
-        $zone = Counter::query()->findOrFail(20);
         $hidden = Instansi::query()->create([
             'nama_instansi' => 'Instansi Tanpa Layanan Aktif',
-            'counter_id' => $zone->id,
+            'zone' => 'ZONA 2',
+            'is_active' => true,
         ]);
         Service::query()->create([
             'instansi_id' => $hidden->instansi_id,
@@ -123,17 +133,24 @@ class KioskUiTest extends TestCase
         string $institutionName = 'Dinas Pelayanan Terpadu',
         string $prefix = 'U',
     ): array {
-        $zone = Counter::query()->findOrFail(20);
         $institution = Instansi::query()->create([
             'nama_instansi' => $institutionName,
             'deskripsi' => 'Pelayanan administrasi',
-            'counter_id' => $zone->id,
+            'zone' => 'ZONA 2',
+            'is_active' => true,
         ]);
         $service = Service::query()->create([
             'instansi_id' => $institution->instansi_id,
             'name' => 'Konsultasi Perizinan dan Penanaman Modal',
             'prefix' => $prefix,
             'padding' => 3,
+            'is_active' => true,
+        ]);
+
+        Counter::query()->create([
+            'code_loket' => 'UJI-'.strtoupper($prefix),
+            'instansi_id' => $institution->instansi_id,
+            'service_id' => $service->id,
             'is_active' => true,
         ]);
 

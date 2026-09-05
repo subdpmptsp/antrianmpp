@@ -21,15 +21,14 @@ class ResilientPublicRoutesTest extends TestCase
 
     public function test_tv_zone_can_resolve_an_explicitly_configured_counter(): void
     {
-        $counter = Counter::query()->create([
-            'name' => 'TV LANTAI KHUSUS',
-            'is_active' => true,
-        ]);
+        $institution = $this->createTestInstitution('TV LANTAI KHUSUS', 'ZONA 1');
+        $service = $this->createTestService($institution);
+        $counter = $this->createTestCounter($institution, $service, ['code_loket' => 'TV LANTAI KHUSUS']);
         config()->set('tv.zones.1.counter_id', $counter->id);
 
         $this->get('/tv1')
             ->assertOk()
-            ->assertSee('TV LANTAI KHUSUS');
+            ->assertSee('ZONA 1');
     }
 
     public function test_queue_status_without_id_shows_controlled_empty_state(): void

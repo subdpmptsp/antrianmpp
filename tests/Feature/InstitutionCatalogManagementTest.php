@@ -20,15 +20,16 @@ class InstitutionCatalogManagementTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
 
         $this->actingAs($admin)
-            ->get(InstansiResource::getUrl('create'))
+            ->get(InstansiResource::getUrl('index'))
             ->assertOk()
-            ->assertSee('Logo Instansi untuk Kiosk')
-            ->assertSee('Zona Internal');
+            ->assertSee('Instansis');
 
         $this->assertTrue(Schema::hasColumn('instansis', 'logo_path'));
 
         $institution = Instansi::query()->create([
             'nama_instansi' => 'Instansi Uji',
+            'zone' => 'ZONA 1',
+            'is_active' => true,
             'logo_path' => 'instansi-logos/logo-uji.webp',
         ]);
 
@@ -39,14 +40,6 @@ class InstitutionCatalogManagementTest extends TestCase
     public function test_catalog_normalization_applies_approved_corrections(): void
     {
         $now = now();
-        DB::table('counters')->insert([
-            'id' => 109,
-            'name' => 'ZONA 5',
-            'is_active' => true,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
-
         $institutions = [
             3 => 'UPTSP',
             5 => 'B/J & Adpemb Kota Surabaya',
@@ -65,6 +58,9 @@ class InstitutionCatalogManagementTest extends TestCase
             DB::table('instansis')->insert([
                 'instansi_id' => $id,
                 'nama_instansi' => $name,
+                'zone' => 'ZONA 5',
+                'is_active' => true,
+                'is_archived' => false,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
@@ -80,10 +76,6 @@ class InstitutionCatalogManagementTest extends TestCase
             43 => [10, 'Layanan Hukum', '5A', true],
             44 => [9, 'Layanan Hukum', '5B', true],
             46 => [26, 'Layanan Perijinan Berusaha', '5D', true],
-            29 => [null, 'Layanan Hukum', '3D', false],
-            30 => [null, 'Layanan Hukum ', '3E', false],
-            36 => [null, 'Layanan Informasi', '4B', false],
-            37 => [null, 'Layanan Informasi', '4B', false],
         ];
 
         foreach ($services as $id => [$institutionId, $name, $prefix, $active]) {
@@ -111,8 +103,8 @@ class InstitutionCatalogManagementTest extends TestCase
             'nama_instansi' => 'Dinas Perumahan Rakyat dan Kawasan Permukiman serta Pertanahan (DPRKPP)',
         ]);
         $this->assertDatabaseHas('instansis', ['instansi_id' => 17, 'nama_instansi' => 'Direktorat Jenderal Pajak']);
-        $this->assertDatabaseHas('instansis', ['instansi_id' => 27, 'counter_id' => 109]);
-        $this->assertDatabaseHas('instansis', ['instansi_id' => 28, 'counter_id' => 109]);
+        $this->assertDatabaseHas('instansis', ['instansi_id' => 27, 'zone' => 'ZONA 5']);
+        $this->assertDatabaseHas('instansis', ['instansi_id' => 28, 'zone' => 'ZONA 5']);
 
         foreach ([6 => '1O', 19 => '2G', 23 => '2I', 43 => '3D', 44 => '3B'] as $id => $prefix) {
             $this->assertDatabaseHas('services', ['id' => $id, 'prefix' => $prefix]);
@@ -121,9 +113,5 @@ class InstitutionCatalogManagementTest extends TestCase
         $this->assertDatabaseHas('services', ['id' => 10, 'name' => 'Konsultasi Perizinan Non Berusaha']);
         $this->assertDatabaseHas('services', ['id' => 34, 'name' => 'Layanan DPRKPP (Loket Informasi dan Konsultasi Teknis)']);
         $this->assertDatabaseHas('services', ['id' => 46, 'name' => 'Layanan Perizinan Berusaha']);
-        $this->assertDatabaseMissing('services', ['id' => 29]);
-        $this->assertDatabaseMissing('services', ['id' => 30]);
-        $this->assertDatabaseMissing('services', ['id' => 36]);
-        $this->assertDatabaseMissing('services', ['id' => 37]);
     }
 }

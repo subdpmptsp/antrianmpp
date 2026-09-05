@@ -15,8 +15,10 @@ class LegacyServiceCounterReconciliationTest extends TestCase
 
     public function test_migration_merges_duplicate_history_and_corrects_counter_assignment(): void
     {
+        $institution = $this->createTestInstitution('INSTANSI LEGACY', 'ZONA 3');
         $canonical = Service::unguarded(fn () => Service::query()->create([
             'id' => 44,
+            'instansi_id' => $institution->instansi_id,
             'name' => 'Layanan Hukum',
             'prefix' => 'A',
             'padding' => 3,
@@ -24,6 +26,7 @@ class LegacyServiceCounterReconciliationTest extends TestCase
         ]));
         $duplicate = Service::unguarded(fn () => Service::query()->create([
             'id' => 58,
+            'instansi_id' => $institution->instansi_id,
             'name' => 'Layanan Hukum',
             'prefix' => 'B',
             'padding' => 3,
@@ -31,7 +34,8 @@ class LegacyServiceCounterReconciliationTest extends TestCase
         ]));
         $counter = Counter::unguarded(fn () => Counter::query()->create([
             'id' => 34,
-            'name' => 'ZONA 3',
+            'code_loket' => 'LEGACY-34',
+            'instansi_id' => $institution->instansi_id,
             'service_id' => $canonical->id,
             'is_active' => true,
         ]));
@@ -44,6 +48,7 @@ class LegacyServiceCounterReconciliationTest extends TestCase
 
         $serviceTwenty = Service::unguarded(fn () => Service::query()->create([
             'id' => 20,
+            'instansi_id' => $institution->instansi_id,
             'name' => 'Layanan Konsultasi Pengadaan',
             'prefix' => 'C',
             'padding' => 3,
@@ -51,7 +56,8 @@ class LegacyServiceCounterReconciliationTest extends TestCase
         ]));
         $counterTwentyFour = Counter::unguarded(fn () => Counter::query()->create([
             'id' => 24,
-            'name' => 'ZONA 2',
+            'code_loket' => 'LEGACY-24',
+            'instansi_id' => $institution->instansi_id,
             'service_id' => $canonical->id,
             'is_active' => true,
         ]));

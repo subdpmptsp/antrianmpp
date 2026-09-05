@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Counter;
 use App\Models\DeviceRegistration;
+use App\Models\Instansi;
+use App\Models\Service;
 use App\Services\TvZoneResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -49,8 +51,8 @@ class DeviceAuthorizationTest extends TestCase
 
     public function test_tv_token_is_bound_to_its_own_zone_and_api(): void
     {
-        $zoneOne = Counter::create(['name' => 'ZONA 1', 'is_active' => true]);
-        $zoneTwo = Counter::create(['name' => 'ZONA 2', 'is_active' => true]);
+        $zoneOne = $this->createZoneCounter('ZONA 1');
+        $zoneTwo = $this->createZoneCounter('ZONA 2');
 
         $this->get('/tv1')->assertForbidden();
         $this->get('/tv1?device_token=tv-zone-one-token')
@@ -68,8 +70,8 @@ class DeviceAuthorizationTest extends TestCase
 
     public function test_direct_zone_display_accepts_only_matching_zone_token(): void
     {
-        $zoneOne = Counter::create(['name' => 'ZONA 1', 'is_active' => true]);
-        $zoneTwo = Counter::create(['name' => 'ZONA 2', 'is_active' => true]);
+        $zoneOne = $this->createZoneCounter('ZONA 1');
+        $zoneTwo = $this->createZoneCounter('ZONA 2');
 
         $this->assertSame($zoneOne->id, app(TvZoneResolver::class)->resolve(1)?->id);
         $this->get("/tv-display/zona/{$zoneOne->id}?device_token=tv-zone-one-token")->assertOk();
@@ -81,5 +83,28 @@ class DeviceAuthorizationTest extends TestCase
         config()->set('devices.kiosk.token', null);
 
         $this->get('/kiosk/cetak-antrian')->assertStatus(503);
+    }
+
+    private function createZoneCounter(string $zone): Counter
+    {
+        $instansi = Instansi::query()->create([
+            'nama_instansi' => 'Instansi '.$zone,
+            'zone' => $zone,
+            'is_active' => true,
+        ]);
+        $service = Service::query()->create([
+            'instansi_id' => $instansi->instansi_id,
+            'name' => 'Layanan '.$zone,
+            'prefix' => 'T'.str_replace('ZONA ', '', $zone),
+            'padding' => 3,
+            'is_active' => true,
+        ]);
+
+        return Counter::query()->create([
+            'code_loket' => 'TEST-'.str_replace(' ', '-', $zone),
+            'instansi_id' => $instansi->instansi_id,
+            'service_id' => $service->id,
+            'is_active' => true,
+        ]);
     }
 }

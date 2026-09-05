@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Queue;
-use App\Models\Service;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
@@ -14,7 +13,8 @@ class QueueTimestampMigrationTest extends TestCase
 
     public function test_new_lifecycle_transitions_always_write_matching_timestamps(): void
     {
-        $service = Service::query()->create([
+        $institution = $this->createTestInstitution();
+        $service = $this->createTestService($institution, [
             'name' => 'LAYANAN TEST',
             'prefix' => 'T',
             'padding' => 3,

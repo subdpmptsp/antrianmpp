@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Counter;
 use App\Models\Instansi;
 use App\Models\Queue;
+use App\Models\QueueOperatingSetting;
 use App\Models\Service;
 use App\Services\QueueService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -15,6 +16,21 @@ use Tests\TestCase;
 class QueueCreationSecurityTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        QueueOperatingSetting::query()->update([
+            'weekly_schedule' => collect(range(1, 7))->map(fn (int $day) => [
+                'day' => $day,
+                'is_open' => true,
+                'opens_at' => '00:00',
+                'closes_at' => '23:59',
+            ])->all(),
+            'cutoff_minutes' => 0,
+        ]);
+    }
 
     public function test_queue_cannot_be_created_through_get_request(): void
     {
@@ -126,7 +142,8 @@ class QueueCreationSecurityTest extends TestCase
         $activeService = $this->createService(institutionName: 'INSTANSI DINAMIS');
         $secondInstitution = Instansi::query()->create([
             'nama_instansi' => 'INSTANSI KEDUA',
-            'counter_id' => $activeService->instansi->counter_id,
+            'zone' => $activeService->instansi->zone,
+            'is_active' => true,
         ]);
         Service::query()->create([
             'instansi_id' => $secondInstitution->instansi_id,
@@ -265,21 +282,27 @@ class QueueCreationSecurityTest extends TestCase
 
     private function createService(string $zoneName = 'ZONA 1', string $institutionName = 'INSTANSI TEST'): Service
     {
-        $counter = Counter::query()->create([
-            'name' => $zoneName,
-            'is_active' => true,
-        ]);
         $institution = Instansi::query()->create([
             'nama_instansi' => $institutionName,
-            'counter_id' => $counter->id,
+            'zone' => $zoneName,
+            'is_active' => true,
         ]);
 
-        return Service::query()->create([
+        $service = Service::query()->create([
             'instansi_id' => $institution->instansi_id,
             'name' => 'LAYANAN TEST',
             'prefix' => 'T',
             'padding' => 3,
             'is_active' => true,
         ]);
+
+        Counter::query()->create([
+            'code_loket' => 'TEST-'.str_replace(' ', '-', $zoneName),
+            'instansi_id' => $institution->instansi_id,
+            'service_id' => $service->id,
+            'is_active' => true,
+        ]);
+
+        return $service;
     }
 }

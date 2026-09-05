@@ -99,19 +99,14 @@ class PrintingArtifactsTest extends TestCase
 
     private function createQueue(): Queue
     {
-        $counter = Counter::query()->create(['name' => 'ZONA TEST', 'is_active' => true]);
-        $institution = Instansi::query()->create([
-            'nama_instansi' => 'INSTANSI TEST',
-            'counter_id' => $counter->id,
-        ]);
-        $service = Service::query()->create([
-            'instansi_id' => $institution->instansi_id,
+        $institution = $this->createTestInstitution('INSTANSI TEST', 'ZONA TEST');
+        $service = $this->createTestService($institution, [
             'name' => 'LAYANAN TEST',
             'prefix' => 'A',
             'padding' => 3,
             'is_active' => true,
         ]);
-        $counter->update(['service_id' => $service->id]);
+        $counter = $this->createTestCounter($institution, $service, ['code_loket' => 'ZONA-TEST']);
 
         return Queue::query()->create([
             'service_id' => $service->id,

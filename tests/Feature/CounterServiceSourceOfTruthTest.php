@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Counter;
+use App\Models\Instansi;
 use App\Models\Queue;
 use App\Models\Service;
 use App\Services\QueueService;
@@ -18,7 +19,8 @@ class CounterServiceSourceOfTruthTest extends TestCase
     {
         $service = $this->createService();
         $assigned = Counter::query()->create([
-            'name' => 'LOKET RESMI',
+            'code_loket' => 'LOKET RESMI',
+            'instansi_id' => $service->instansi_id,
             'service_id' => $service->id,
             'is_active' => true,
         ]);
@@ -28,8 +30,13 @@ class CounterServiceSourceOfTruthTest extends TestCase
 
     public function test_legacy_relation_does_not_make_queue_eligible_for_counter(): void
     {
-        $counter = Counter::query()->create(['name' => 'LOKET TANPA LAYANAN', 'is_active' => true]);
-        $service = $this->createService(['counter_id' => $counter->id]);
+        $service = $this->createService();
+        $counter = Counter::query()->create([
+            'code_loket' => 'LOKET TANPA LAYANAN',
+            'instansi_id' => $service->instansi_id,
+            'service_id' => null,
+            'is_active' => false,
+        ]);
         DB::table('counter_service')->insert([
             'counter_id' => $counter->id,
             'service_id' => $service->id,
@@ -48,6 +55,11 @@ class CounterServiceSourceOfTruthTest extends TestCase
     private function createService(array $attributes = []): Service
     {
         return Service::query()->create(array_merge([
+            'instansi_id' => Instansi::query()->create([
+                'nama_instansi' => 'INSTANSI SUMBER TUNGGAL',
+                'zone' => 'ZONA 1',
+                'is_active' => true,
+            ])->instansi_id,
             'name' => 'LAYANAN SUMBER TUNGGAL',
             'prefix' => 'S',
             'padding' => 3,

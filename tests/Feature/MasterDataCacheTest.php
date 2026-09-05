@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\Service;
 use App\Services\MasterDataCache;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -27,7 +26,8 @@ class MasterDataCacheTest extends TestCase
         $this->assertSame(1, $second);
         $this->assertSame(1, $callbackRuns);
 
-        Service::query()->create([
+        $institution = $this->createTestInstitution();
+        $this->createTestService($institution, [
             'name' => 'LAYANAN INVALIDASI',
             'prefix' => 'CI',
             'padding' => 3,

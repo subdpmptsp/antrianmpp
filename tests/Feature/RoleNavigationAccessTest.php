@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Pages\Auth\Login;
 use App\Filament\Pages\TestPrintPage;
+use App\Http\Responses\RoleBasedLoginResponse;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -44,17 +45,11 @@ class RoleNavigationAccessTest extends TestCase
         $operator = User::factory()->create(['role' => 'operator']);
         $this->actingAs($operator);
 
-        $login = new class extends Login
-        {
-            public function redirectUrlForTest(): string
-            {
-                return $this->getRedirectUrl();
-            }
-        };
+        $response = app(RoleBasedLoginResponse::class)->toResponse(request());
 
         $this->assertSame(
             route('filament.admin.pages.dashboard-call-kiosk'),
-            $login->redirectUrlForTest(),
+            $response->getTargetUrl(),
         );
     }
 

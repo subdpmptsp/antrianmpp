@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Counter;
 use App\Models\Queue;
+use App\Models\QueueOperatingSetting;
 use App\Models\Service;
 use Illuminate\Support\Facades\Artisan;
 use Symfony\Component\Process\Process;
@@ -16,6 +17,12 @@ class QueueConcurrencyTest extends TestCase
         parent::setUp();
 
         Artisan::call('migrate:fresh', ['--force' => true]);
+        QueueOperatingSetting::query()->update([
+            'weekly_schedule' => collect(range(1, 7))->map(fn (int $day) => [
+                'day' => $day, 'is_open' => true, 'opens_at' => '00:00', 'closes_at' => '23:59',
+            ])->all(),
+            'cutoff_minutes' => 0,
+        ]);
     }
 
     protected function tearDown(): void
@@ -29,11 +36,9 @@ class QueueConcurrencyTest extends TestCase
 
     public function test_two_operators_cannot_claim_the_same_ticket(): void
     {
-        $firstCounter = $this->createCounter('LOKET A');
-        $secondCounter = $this->createCounter('LOKET B');
         $service = $this->createService();
-        $firstCounter->update(['service_id' => $service->id]);
-        $secondCounter->update(['service_id' => $service->id]);
+        $firstCounter = $this->createCounter('LOKET A', $service);
+        $secondCounter = $this->createCounter('LOKET B', $service);
         $queue = Queue::query()->create([
             'service_id' => $service->id,
             'number' => 'C-001',
@@ -50,6 +55,7 @@ class QueueConcurrencyTest extends TestCase
     public function test_two_kiosks_generate_distinct_sequential_numbers(): void
     {
         $service = $this->createService();
+        $this->createCounter('LOKET KIOSK', $service);
 
         $results = $this->runConcurrently('create', [$service->id, $service->id]);
         sort($results);
@@ -85,7 +91,7 @@ class QueueConcurrencyTest extends TestCase
 
             return array_map(function (Process $process): string {
                 $process->wait();
-                $this->assertTrue($process->isSuccessful(), $process->getErrorOutput());
+                $this->assertTrue($process->isSuccessful(), $process->getErrorOutput()."\n".$process->getOutput());
 
                 return trim($process->getOutput());
             }, $processes);
@@ -96,14 +102,16 @@ class QueueConcurrencyTest extends TestCase
         }
     }
 
-    private function createCounter(string $name): Counter
+    private function createCounter(string $name, Service $service): Counter
     {
-        return Counter::query()->create(['name' => $name, 'is_active' => true]);
+        return $this->createTestCounter($service->instansi, $service, ['code_loket' => $name]);
     }
 
     private function createService(): Service
     {
-        return Service::query()->create([
+        $institution = $this->createTestInstitution('INSTANSI CONCURRENCY', 'ZONA 1');
+
+        return $this->createTestService($institution, [
             'name' => 'LAYANAN CONCURRENCY',
             'prefix' => 'C',
             'padding' => 3,

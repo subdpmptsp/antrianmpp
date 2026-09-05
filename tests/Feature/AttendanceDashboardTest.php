@@ -113,6 +113,7 @@ class AttendanceDashboardTest extends TestCase
     {
         $instansi = Instansi::create([
             'nama_instansi' => $name,
+            'zone' => 'ZONA 1',
             'work_days_per_week' => $workDays,
         ]);
         $service = Service::create([
@@ -124,7 +125,12 @@ class AttendanceDashboardTest extends TestCase
         ]);
         $operator = User::factory()->create([
             'role' => User::ROLE_OPERATOR,
-            'service_id' => $service->id,
+            'counter_id' => \App\Models\Counter::create([
+                'instansi_id' => $instansi->instansi_id,
+                'service_id' => $service->id,
+                'code_loket' => 'TEST-'.fake()->unique()->numerify('###'),
+                'is_active' => true,
+            ])->id,
             'username' => fake()->unique()->userName(),
         ]);
 
