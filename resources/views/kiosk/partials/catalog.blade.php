@@ -2,7 +2,6 @@
     use Illuminate\Support\Facades\Storage;
 
     $isLivewire = ($interactionMode ?? 'public') === 'livewire';
-    $currentStep = $selectedInstansi ? 2 : 1;
     $selectedInstitution = $selectedInstansi
         ? $instansis->firstWhere('instansi_id', $selectedInstansi)
         : null;
@@ -15,7 +14,7 @@
     class="queue-kiosk"
     data-kiosk-root
     data-mode="{{ $isLivewire ? 'livewire' : 'public' }}"
-    data-step="{{ $currentStep }}"
+    data-step="{{ $selectedInstansi ? 2 : 1 }}"
     data-home-url="{{ route('public.queue-kiosk') }}"
 >
     <header class="queue-kiosk__header">
@@ -45,25 +44,9 @@
     </header>
 
     <main class="queue-kiosk__main">
-        <nav class="queue-kiosk__steps" aria-label="Tahapan pengambilan antrian">
-            @foreach ([1 => ['Instansi', 'Pilih tujuan'], 2 => ['Layanan', 'Cetak langsung']] as $number => [$label, $description])
-                <div class="queue-kiosk__step {{ $currentStep >= $number ? 'is-active' : '' }} {{ $currentStep > $number ? 'is-complete' : '' }}">
-                    <span class="queue-kiosk__step-number">
-                        @if ($currentStep > $number)
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
-                        @else
-                            {{ $number }}
-                        @endif
-                    </span>
-                    <span><strong>{{ $label }}</strong><small>{{ $description }}</small></span>
-                </div>
-            @endforeach
-        </nav>
-
         <section class="queue-kiosk__content">
             @if (! $selectedInstansi)
                 <div class="queue-kiosk__intro">
-                    <span>Langkah 1 dari 2</span>
                     <h2>Instansi apa yang Anda tuju?</h2>
                     <p>Sentuh salah satu pilihan di bawah ini.</p>
                 </div>
@@ -136,12 +119,11 @@
                 </div>
 
                 <div class="queue-kiosk__intro">
-                    <span>Langkah 2 dari 2</span>
                     <h2>Pilih layanan yang dibutuhkan</h2>
                     <p>Tiket akan langsung dicetak setelah layanan disentuh.</p>
                 </div>
 
-                <div class="queue-kiosk__service-grid">
+                <div class="queue-kiosk__service-grid {{ $services->count() === 1 ? 'is-single' : '' }}">
                     @php
                         $sharedConsultationServices = collect($services)
                             ->filter(fn ($item): bool => in_array($item->prefix, ['3C-6', '3C-7'], true))
@@ -151,6 +133,12 @@
                             ?? $sharedConsultationServices
                             ->first(fn ($item): bool => (bool) $item->getAttribute('is_recommended_consultation_counter'))
                             ?? $sharedConsultationServices->first();
+                        $sharedBpjsServices = collect($services)
+                            ->filter(fn ($item): bool => in_array($item->prefix, ['4A1', '4A2'], true))
+                            ->values();
+                        $sharedBpjsService = $sharedBpjsServices
+                            ->first(fn ($item): bool => (bool) $item->getAttribute('queue_available'))
+                            ?? $sharedBpjsServices->first();
                     @endphp
 
                     @if ($sharedConsultationService)
@@ -183,6 +171,35 @@
                         </button>
                     @endif
 
+                    @if ($sharedBpjsService)
+                        @php
+                            $sharedBpjsAccepting = $sharedBpjsServices->contains(fn ($item): bool => (bool) $item->getAttribute('queue_available'));
+                            $sharedBpjsWaiting = (int) $sharedBpjsServices->sum(fn ($item): int => (int) ($item->active_queue_count ?? 0));
+                            $sharedBpjsClosedMessage = $sharedBpjsServices->first()?->getAttribute('queue_unavailable_message') ?: 'Layanan ini sedang tidak menerima nomor antrean.';
+                        @endphp
+                        @if (! $isLivewire)
+                            <form id="kiosk-service-shared-bpjs" method="POST" action="{{ route('public.queue-kiosk.select-service', ['serviceId' => $sharedBpjsService->id]) }}" class="queue-kiosk__service-form">
+                                @csrf
+                                <input type="hidden" name="queue_request_token" value="{{ $queueRequestToken }}">
+                                <input type="hidden" name="instansi_id" value="{{ $selectedInstansi }}">
+                            </form>
+                        @endif
+                        <button type="button"
+                            class="queue-kiosk__service-card {{ $sharedBpjsAccepting ? '' : 'is-unavailable' }}"
+                            data-kiosk-service
+                            data-service-id="{{ $sharedBpjsService->id }}"
+                            data-queue-closed="{{ $sharedBpjsAccepting ? 'false' : 'true' }}"
+                            @if (! $isLivewire) data-form-id="kiosk-service-shared-bpjs" @endif
+                            @disabled(! $sharedBpjsAccepting)
+                        >
+                            <span class="queue-kiosk__service-copy">
+                                <strong>{{ $sharedBpjsService->name }}</strong>
+                                <small>{{ $sharedBpjsAccepting ? $sharedBpjsWaiting.' pemohon menunggu · Loket 4A1 / 4A2' : $sharedBpjsClosedMessage }}</small>
+                            </span>
+                            <svg class="queue-kiosk__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                    @endif
+
                     @forelse ($services as $service)
                         @php
                             $isAcceptingQueues = (bool) $service->getAttribute('queue_available');
@@ -190,7 +207,7 @@
                             $isDisdukcapilConsultationCounter = (bool) $service->getAttribute('is_disdukcapil_consultation_counter');
                             $isRecommendedConsultationCounter = (bool) $service->getAttribute('is_recommended_consultation_counter');
                         @endphp
-                        @if ($isDisdukcapilConsultationCounter)
+                        @if ($isDisdukcapilConsultationCounter || in_array($service->prefix, ['4A1', '4A2'], true))
                             @continue
                         @endif
                         @if (! $isLivewire)
@@ -228,7 +245,17 @@
                                         <span class="queue-kiosk__recommendation">Disarankan</span>
                                     @endif
                                 @else
-                                    <small>{{ $isAcceptingQueues ? 'Sentuh untuk mencetak tiket' : $queueUnavailableMessage }}</small>
+                                    <small>
+                                        @if ($isAcceptingQueues)
+                                            @if ((int) ($service->active_queue_count ?? 0) > 0)
+                                                {{ (int) $service->active_queue_count }} pemohon menunggu
+                                            @else
+                                                Belum ada antrean menunggu
+                                            @endif
+                                        @else
+                                            {{ $queueUnavailableMessage }}
+                                        @endif
+                                    </small>
                                 @endif
                             </span>
                             <svg class="queue-kiosk__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>

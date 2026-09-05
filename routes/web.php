@@ -11,6 +11,7 @@ use App\Http\Controllers\BarcodeController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\EventQueuePublicController;
 use App\Http\Controllers\PublicQueueKioskController;
+use App\Http\Controllers\PublicWaitingRoomTvController;
 use App\Http\Controllers\QueuePrintController;
 use App\Http\Controllers\StrukController;
 use App\Http\Controllers\TicketController;
@@ -150,6 +151,9 @@ Route::get('/api/tv-display/latest-announcement', [TvDisplayController::class, '
 
 // TV Display Index (Public - No Auth Required)
 Route::get('/tv-display', [TvDisplayController::class, 'index'])->name('tv.display');
+
+// Tampilan TV ruang tunggu versi publik: pilih zona terlebih dahulu, tanpa login admin.
+Route::get('/tv-ruang-tunggu', PublicWaitingRoomTvController::class)->name('tv.waiting-room');
 
 // TV Display per Zona
 Route::get('/tv-display/zona/{zoneId}', function ($zoneId) {

@@ -11,6 +11,12 @@ use Illuminate\Support\Facades\DB;
 
 class QueueService
 {
+    /** @var array<int, array<int, string>> */
+    private const ALTERNATING_SERVICE_PREFIX_GROUPS = [
+        ['3C-6', '3C-7'],
+        ['4A1', '4A2'],
+    ];
+
     public function __construct(
         private readonly ServiceQueueAvailabilityService $availability,
     ) {}
@@ -70,7 +76,7 @@ class QueueService
         return DB::transaction(function () use ($serviceId, $status) {
             $requestedService = Service::query()->findOrFail($serviceId);
 
-            $alternatingService = $this->lockAlternatingDisdukcapilConsultationService($requestedService);
+            $alternatingService = $this->lockAlternatingSharedCounterService($requestedService);
 
             if ($alternatingService) {
                 $this->ensureAvailable($alternatingService);
@@ -119,19 +125,22 @@ class QueueService
     }
 
     /**
-     * Loket 3C-6 dan 3C-7 melayani layanan yang sama, tetapi tiket harus
-     * diarahkan bergiliran. Kedua layanan dikunci dengan urutan yang sama agar
-     * sentuhan serentak dari beberapa kiosk tetap menghasilkan urutan 6-7-6-7.
+     * Beberapa pasangan loket melayani satu jenis layanan yang sama. Tiket
+     * diarahkan bergiliran dalam satu transaksi agar sentuhan serentak tetap
+     * konsisten dan tidak selalu menumpuk pada loket pertama.
      */
-    private function lockAlternatingDisdukcapilConsultationService(Service $requestedService): ?Service
+    private function lockAlternatingSharedCounterService(Service $requestedService): ?Service
     {
-        if (! in_array($requestedService->prefix, ['3C-6', '3C-7'], true)) {
+        $prefixes = collect(self::ALTERNATING_SERVICE_PREFIX_GROUPS)
+            ->first(fn (array $group): bool => in_array($requestedService->prefix, $group, true));
+
+        if (! $prefixes) {
             return null;
         }
 
         $services = Service::query()
             ->where('instansi_id', $requestedService->instansi_id)
-            ->whereIn('prefix', ['3C-6', '3C-7'])
+            ->whereIn('prefix', $prefixes)
             ->where('is_active', true)
             ->where('is_archived', false)
             ->where('is_accepting_queues', true)
@@ -150,7 +159,7 @@ class QueueService
             ->value('service_id');
 
         return $services->first(fn (Service $service): bool => (int) $service->id !== (int) $lastServiceId)
-            ?? $services->firstWhere('prefix', '3C-6');
+            ?? $services->firstWhere('prefix', $prefixes[0]);
     }
 
     public function generateNumber($serviceId)
@@ -297,6 +306,22 @@ class QueueService
             ->unique()
             ->values();
 
+        // Nomor menunggu adalah milik layanan, bukan milik loket tertentu.
+        // Dukungan counter_id selain null dipertahankan untuk data lama yang
+        // sempat diarahkan lebih awal. Loket saudara hanya boleh mengambilnya
+        // jika berada pada instansi dan layanan utama yang sama.
+        $eligibleCounterIds = collect([$counter->id]);
+        if ($serviceIds->count() === 1 && $counter->instansi_id) {
+            $eligibleCounterIds = Counter::withoutGlobalScopes()
+                ->where('instansi_id', $counter->instansi_id)
+                ->where('service_id', $serviceIds->first())
+                ->where('is_archived', false)
+                ->pluck('id')
+                ->push($counter->id)
+                ->unique()
+                ->values();
+        }
+
         return Queue::query()
             ->where('status', Queue::STATUS_WAITING)
             ->whereNull('called_at')
@@ -310,9 +335,9 @@ class QueueService
 
                 $query->orWhere('counter_id', $counter->id);
             })
-            ->where(function (Builder $query) use ($counter): void {
+            ->where(function (Builder $query) use ($eligibleCounterIds): void {
                 $query->whereNull('counter_id')
-                    ->orWhere('counter_id', $counter->id);
+                    ->orWhereIn('counter_id', $eligibleCounterIds);
             });
     }
 }

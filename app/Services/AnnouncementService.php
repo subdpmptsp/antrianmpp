@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class AnnouncementService
 {
-    public function latest(?string $afterId = null, ?int $zoneId = null): ?array
+    public function latest(?string $afterId = null, ?int $zoneId = null, bool $latestOnly = false): ?array
     {
         $query = Queue::with(['service', 'counter.instansi'])
             ->whereIn('status', [Queue::STATUS_CALLED, Queue::STATUS_SERVING])
@@ -28,10 +28,11 @@ class AnnouncementService
             });
         }
 
-        $queue = $query
-            ->orderBy('called_at')
-            ->orderBy('id')
-            ->first();
+        // Saat layar TV baru dibuka, ambil panggilan paling akhir sebagai
+        // patokan. Panggilan sebelum TV aktif tidak boleh diputar ulang.
+        $queue = $latestOnly && ! $cursor
+            ? $query->latest('called_at')->latest('id')->first()
+            : $query->orderBy('called_at')->orderBy('id')->first();
 
         if (! $queue) {
             return null;
@@ -47,6 +48,7 @@ class AnnouncementService
             'counterName' => $queue->counter?->display_name ?? 'Loket',
             'zona' => $queue->counter?->instansi?->nama_instansi ?? 'Zona',
             'calledAt' => $queue->called_at->format('H:i:s'),
+            'calledAtIso' => $queue->called_at->toIso8601String(),
         ];
     }
 

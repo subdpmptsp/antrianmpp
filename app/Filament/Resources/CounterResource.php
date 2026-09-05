@@ -159,7 +159,15 @@ class CounterResource extends Resource
                     ->label('Loket')
                     ->formatStateUsing(fn (?string $state): string => $state ?: 'Belum berkode')
                     ->weight('bold')
-                    ->searchable()
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->where(function (Builder $searchQuery) use ($search): void {
+                            $searchQuery
+                                ->where('code_loket', 'like', "%{$search}%")
+                                ->orWhere('name', 'like', "%{$search}%")
+                                ->orWhereHas('instansi', fn (Builder $institutionQuery): Builder => $institutionQuery
+                                    ->where('nama_instansi', 'like', "%{$search}%"));
+                        });
+                    })
                     ->description(function (Counter $record): string {
                         $details = collect([$record->name, $record->instansi?->nama_instansi])->filter();
 

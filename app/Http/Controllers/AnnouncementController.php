@@ -14,6 +14,7 @@ class AnnouncementController extends Controller
             $announcements->latest(
                 $request->string('after_id')->toString() ?: null,
                 $request->integer('zone_id') ?: null,
+                $request->boolean('initial'),
             ),
         );
     }

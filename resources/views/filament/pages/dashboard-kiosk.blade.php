@@ -1,6 +1,13 @@
+@php
+    $tvRouteName = $tvRouteName ?? 'filament.admin.pages.dashboard-kiosk';
+    $isPublicDisplay = $isPublicDisplay ?? false;
+@endphp
+
 @if (! $selectedZoneIsValid)
     <main class="tv-zone-selector">
-        <a href="{{ route('filament.admin.pages.monitoring-dashboard') }}" class="tv-zone-selector__admin-link">← Kembali ke Panel Admin</a>
+        @unless ($isPublicDisplay)
+            <a href="{{ route('filament.admin.pages.monitoring-dashboard') }}" class="tv-zone-selector__admin-link">← Kembali ke Panel Admin</a>
+        @endunless
         <section class="tv-zone-selector__hero">
             <img src="{{ $mppBranding['logo_url'] }}" alt="Logo {{ $mppBranding['name'] }}">
             <div>
@@ -12,7 +19,7 @@
 
         <section class="tv-zone-selector__grid" aria-label="Pilihan zona TV">
             @foreach ($zones as $zone)
-                <a href="{{ route('filament.admin.pages.dashboard-kiosk', ['zone' => $zone['name']]) }}" class="tv-zone-card">
+                <a href="{{ route($tvRouteName, ['zone' => $zone['name']]) }}" class="tv-zone-card">
                     <strong>{{ $zone['number'] }}</strong>
                     <span>{{ $zone['name'] }}</span>
                     <small>Buka tampilan TV</small>
@@ -31,10 +38,15 @@
         $nextQueue = $primaryCounter?->nextQueue;
         $totalInZone = $counters->sum('today_queue_count');
         $waitingInZone = $counters->sum('waiting_queue_count');
-        $calledAt = $primaryQueue?->called_at?->toIso8601String();
+        // Durasi layanan baru dihitung setelah petugas menekan tombol "Layani".
+        // Status "called" hanya berarti nomor sedang/baru dipanggil, belum dilayani.
+        $serviceStartedAt = $primaryQueue?->status === 'serving'
+            ? $primaryQueue->served_at?->toIso8601String()
+            : null;
+        $announcementZoneCounterId = $counters->first()?->id;
     @endphp
 
-    <main class="tv-display" wire:poll.3s="refreshData" data-tv-display data-scroll-speed="24">
+    <main class="tv-display" wire:poll.3s="refreshData" data-tv-display data-scroll-speed="24" data-announcement-zone-counter="{{ $announcementZoneCounterId }}">
         <header class="tv-display__header">
             <div class="tv-display__brand">
                 <img src="{{ $mppBranding['logo_url'] }}" alt="Logo {{ $mppBranding['name'] }}">
@@ -56,8 +68,10 @@
                 <button type="button" class="tv-display__fullscreen" data-tv-fullscreen aria-label="Layar penuh">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3m13 5h3a2 2 0 0 0 2-2v-3"/></svg>
                 </button>
-                <a href="{{ route('filament.admin.pages.monitoring-dashboard') }}" class="tv-display__back">Panel Admin</a>
-                <a href="{{ route('filament.admin.pages.dashboard-kiosk') }}" class="tv-display__back">Ganti zona</a>
+                @unless ($isPublicDisplay)
+                    <a href="{{ route('filament.admin.pages.monitoring-dashboard') }}" class="tv-display__back">Panel Admin</a>
+                @endunless
+                <a href="{{ route($tvRouteName) }}" class="tv-display__back">Ganti zona</a>
             </div>
         </header>
 
@@ -72,10 +86,17 @@
                     <span>{{ $primaryQueue?->service?->name ?? 'Menunggu panggilan antrean' }}</span>
                 </div>
 
-                <div class="tv-current-card__duration">
-                    <span>Waktu layanan</span>
-                    <strong data-service-duration data-called-at="{{ $calledAt }}">00:00:00</strong>
-                </div>
+                @if ($serviceStartedAt)
+                    <div class="tv-current-card__duration">
+                        <span>Waktu layanan</span>
+                        <strong data-service-duration data-started-at="{{ $serviceStartedAt }}">00:00:00</strong>
+                    </div>
+                @else
+                    <div class="tv-current-card__duration is-waiting">
+                        <span>Waktu layanan</span>
+                        <strong>Menunggu petugas mulai melayani</strong>
+                    </div>
+                @endif
 
                 <div class="tv-current-card__summary">
                     <div>
@@ -180,6 +201,7 @@
         .tv-current-card__duration span, .tv-current-card__duration strong { display: block; }
         .tv-current-card__duration span { color: #6a7f9f; font-size: .95rem; }
         .tv-current-card__duration strong { margin-top: .35rem; color: #1555ad; font-size: clamp(1.7rem, 3vw, 2.8rem); }
+        .tv-current-card__duration.is-waiting strong { color: #6a7f9f; font-size: clamp(1rem, 1.8vw, 1.35rem); }
         .tv-current-card__summary { width: 100%; margin: .9rem 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
         .tv-current-card__summary div { padding: 1rem; border-radius: 13px; background: #f8fbff; }
         .tv-current-card__summary .is-next { color: #175f32; background: #cceecb; }
@@ -217,6 +239,21 @@
 @push('scripts')
     <script>
         (() => {
+            const AUDIO_CONFIG = {
+                voice: @js($ttsSettings['voice'] ?? 'auto'),
+                rate: Number(@js($ttsSettings['rate'] ?? 0.9)),
+                pitch: Number(@js($ttsSettings['pitch'] ?? 1.0)),
+                volume: Number(@js($ttsSettings['volume'] ?? 1.0)),
+                openingAudio: @js($announcementOpeningAudioUrl ?? asset('sounds/opening.mp3')),
+            }
+            // TV adalah layar khusus; audio diaktifkan otomatis tanpa tombol kontrol.
+            let audioEnabled = true
+            let lastAnnouncementId = null
+            let announcementsInitialized = false
+            let announcementInProgress = false
+            let announcementPollInProgress = false
+            let announcementStorageKey = null
+            const tvAudioStartedAt = Date.now()
             let previousTime = performance.now()
             let scrollTop = 0
             let pauseUntil = 0
@@ -230,14 +267,146 @@
                     element.textContent = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
                 })
                 document.querySelectorAll('[data-service-duration]').forEach((element) => {
-                    const calledAt = element.dataset.calledAt
-                    if (!calledAt) return
-                    const seconds = Math.max(0, Math.floor((now.getTime() - new Date(calledAt).getTime()) / 1000))
+                    const startedAt = element.dataset.startedAt
+                    if (!startedAt) return
+                    const seconds = Math.max(0, Math.floor((now.getTime() - new Date(startedAt).getTime()) / 1000))
                     const hours = String(Math.floor(seconds / 3600)).padStart(2, '0')
                     const minutes = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')
                     const remainingSeconds = String(seconds % 60).padStart(2, '0')
                     element.textContent = `${hours}:${minutes}:${remainingSeconds}`
                 })
+            }
+
+            const wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+
+            const normalizeAnnouncement = (data) => {
+                const digitWords = ['nol', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan']
+                const letterWords = {
+                    A: 'a', B: 'be', C: 'ce', D: 'de', E: 'e', F: 'ef', G: 'ge', H: 'ha', I: 'i', J: 'je',
+                    K: 'ka', L: 'el', M: 'em', N: 'en', O: 'o', P: 'pe', Q: 'ki', R: 'er', S: 'es', T: 'te',
+                    U: 'u', V: 've', W: 'we', X: 'eks', Y: 'ye', Z: 'zet',
+                }
+                const spellCode = (value) => String(value || '')
+                    .split(/[^a-zA-Z0-9]+/)
+                    .filter(Boolean)
+                    .map((part) => [...part].map((character) => {
+                        if (/\d/.test(character)) return digitWords[Number(character)]
+
+                        return letterWords[character.toUpperCase()] || character
+                    }).join(' '))
+                    .join(' ')
+                const queueNumber = spellCode(data?.queueNumber)
+                const serviceName = String(data?.serviceName || 'layanan')
+                    .replace(/\bIKD\b/gi, 'I K D')
+                    .replace(/\bYOB\b/gi, 'Y O B')
+                    .replace(/\bKTP-el\b/gi, 'E KTP')
+                const counterName = String(data?.counterName || 'Loket')
+                const zoneOneCounter = counterName.match(/^Loket\s+Z1-(\d{2})$/i)
+                const spokenCounter = zoneOneCounter
+                    ? `loket ${Number(zoneOneCounter[1])}`
+                    : `loket ${spellCode(counterName.replace(/^Loket\s+/i, '')) || 'tujuan'}`
+
+                return `Nomor antrean ${queueNumber}, silakan menuju ${spokenCounter} untuk layanan ${serviceName}`
+            }
+
+            const playOpeningAudio = () => new Promise((resolve, reject) => {
+                const audio = new Audio(AUDIO_CONFIG.openingAudio)
+                audio.volume = AUDIO_CONFIG.volume
+                audio.onended = resolve
+                audio.onerror = reject
+                audio.play().catch(reject)
+            })
+
+            const speakAnnouncement = (text) => new Promise((resolve, reject) => {
+                if (!('speechSynthesis' in window)) return reject(new Error('Speech synthesis tidak tersedia'))
+
+                try {
+                    window.speechSynthesis.cancel()
+                    const utterance = new SpeechSynthesisUtterance(text)
+                    utterance.lang = 'id-ID'
+                    utterance.rate = AUDIO_CONFIG.rate
+                    utterance.pitch = AUDIO_CONFIG.pitch
+                    utterance.volume = AUDIO_CONFIG.volume
+
+                    const voices = window.speechSynthesis.getVoices()
+                    const configuredVoice = AUDIO_CONFIG.voice !== 'auto'
+                        ? voices.find((voice) => voice.name === AUDIO_CONFIG.voice)
+                        : null
+                    const indonesianVoice = configuredVoice || voices.find((voice) => voice.lang?.toLowerCase().startsWith('id'))
+                    if (indonesianVoice) utterance.voice = indonesianVoice
+
+                    utterance.onend = resolve
+                    utterance.onerror = reject
+                    window.speechSynthesis.speak(utterance)
+                } catch (error) {
+                    reject(error)
+                }
+            })
+
+            const playAnnouncement = async (announcement) => {
+                if (!audioEnabled || announcementInProgress) return
+
+                const playbackKey = `siola-tv-played:${announcement.announcementId}`
+                const previouslyPlayedAt = Number(localStorage.getItem(playbackKey) || 0)
+                if (previouslyPlayedAt && Date.now() - previouslyPlayedAt < 10 * 60 * 1000) return
+
+                // Kunci lintas tab harus ditulis sebelum audio dimulai agar satu
+                // panggilan tidak diputar serentak oleh dua instance halaman TV.
+                localStorage.setItem(playbackKey, String(Date.now()))
+
+                announcementInProgress = true
+                try {
+                    await playOpeningAudio()
+                    await wait(700)
+                    await speakAnnouncement(normalizeAnnouncement(announcement))
+                } catch (error) {
+                    console.warn('Audio pemanggilan TV tidak dapat diputar.', error)
+                } finally {
+                    announcementInProgress = false
+                }
+            }
+
+            const pollAnnouncements = async () => {
+                if (announcementPollInProgress) return
+
+                const root = document.querySelector('[data-tv-display]')
+                const counterId = root?.dataset.announcementZoneCounter
+                if (!counterId) return
+
+                const zoneStorageKey = `siola-tv-last-announcement:${counterId}`
+                if (announcementStorageKey !== zoneStorageKey) {
+                    announcementStorageKey = zoneStorageKey
+                    lastAnnouncementId = localStorage.getItem(zoneStorageKey)
+                    announcementsInitialized = Boolean(lastAnnouncementId)
+                }
+
+                announcementPollInProgress = true
+                try {
+                    const query = new URLSearchParams({ zone_id: counterId })
+                    if (lastAnnouncementId) query.set('after_id', lastAnnouncementId)
+                    else query.set('initial', '1')
+                    const response = await fetch(`/api/announcements/latest?${query.toString()}`, { cache: 'no-store' })
+                    if (!response.ok) return
+
+                    const announcement = await response.json()
+                    if (!announcement) {
+                        announcementsInitialized = true
+                        return
+                    }
+
+                    const isNewAnnouncement = announcementsInitialized && announcement.announcementId !== lastAnnouncementId
+                    lastAnnouncementId = announcement.announcementId
+                    announcementsInitialized = true
+                    localStorage.setItem(zoneStorageKey, lastAnnouncementId)
+
+                    const calledAt = announcement.calledAtIso ? new Date(announcement.calledAtIso).getTime() : 0
+                    const happenedAfterTvStarted = calledAt >= tvAudioStartedAt - 2000
+                    if (isNewAnnouncement && happenedAfterTvStarted) await playAnnouncement(announcement)
+                } catch (_) {
+                    // Ketika jaringan TV terputus, layar tetap berjalan dengan data terakhir.
+                } finally {
+                    announcementPollInProgress = false
+                }
             }
 
             const scrollQueueList = (time) => {
@@ -278,7 +447,11 @@
             })
 
             updateClock()
+            pollAnnouncements()
             window.setInterval(updateClock, 1000)
+            window.setInterval(() => {
+                pollAnnouncements()
+            }, 2500)
             window.requestAnimationFrame(scrollQueueList)
         })()
     </script>

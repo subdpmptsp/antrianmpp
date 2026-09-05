@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Counter;
 use App\Models\Setting;
+use App\Services\AudioConfigurationService;
 use Filament\Pages\Page;
 
 class DashboardKiosk extends Page
@@ -79,6 +80,8 @@ class DashboardKiosk extends Page
             ->orderBy('id')
             ->get();
 
+        $audioConfig = app(AudioConfigurationService::class)->get();
+
         return [
             'zones' => $zones,
             'selectedZoneIsValid' => $selectedZoneIsValid,
@@ -88,6 +91,8 @@ class DashboardKiosk extends Page
                 'address' => 'Alamat belum diatur',
                 'image' => null,
             ],
+            'announcementOpeningAudioUrl' => $audioConfig['url'] ?? asset(config('audio.fallback.url', 'sounds/opening.mp3')),
+            'ttsSettings' => $audioConfig['tts'] ?? [],
         ];
     }
 

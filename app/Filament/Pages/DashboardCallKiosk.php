@@ -80,7 +80,18 @@ class DashboardCallKiosk extends Page
                 ->find($user->counter_id);
 
             if ($counter) {
-                $this->counters = collect([$counter]);
+                // Operator boleh memilih loket kerja saudara hanya dalam satu
+                // instansi dan satu layanan utama. Akun login tidak berubah.
+                $this->counters = Counter::withoutGlobalScopes()
+                    ->with(['service', 'instansi'])
+                    ->where('instansi_id', $counter->instansi_id)
+                    ->where('service_id', $counter->service_id)
+                    ->where('is_archived', false)
+                    ->orderBy('code_loket')
+                    ->get();
+                if ($this->counters->isEmpty()) {
+                    $this->counters = collect([$counter]);
+                }
                 $this->selectedCounterId = $counter->id; // Pastikan menggunakan counter->id, bukan user->counter_id
                 $this->selectedServiceId = $counter->service_id;
                 $this->selectedZone = $counter->name;
@@ -160,6 +171,14 @@ class DashboardCallKiosk extends Page
                 return null;
             }
 
+            $requestedCounter = Counter::withoutGlobalScopes()
+                ->with(['service', 'instansi'])
+                ->find($this->selectedCounterId ?? $user->counter_id);
+
+            if ($requestedCounter && $this->operatorCanUseCounter($user, $requestedCounter)) {
+                return $requestedCounter;
+            }
+
             $this->selectedCounterId = $user->counter_id;
         }
 
@@ -228,9 +247,51 @@ class DashboardCallKiosk extends Page
     {
         $user = Auth::user();
 
-        // Operator tidak boleh berpindah loket di luar tugasnya
+        // Operator hanya boleh berpindah loket kerja di dalam tim layanan yang
+        // sama. Identitas akun dan jejak petugas tetap tidak berubah.
         if ($user && $user->role === 'operator') {
-            $this->selectedCounterId = $user->counter_id;
+            $targetCounter = Counter::withoutGlobalScopes()
+                ->with(['service', 'instansi'])
+                ->find($counterId);
+
+            if (! $targetCounter || ! $this->operatorCanUseCounter($user, $targetCounter) || ! $targetCounter->is_active) {
+                return;
+            }
+
+            if ((int) $targetCounter->id !== (int) $this->selectedCounterId) {
+                $currentCounterHasActiveQueue = Queue::query()
+                    ->where('counter_id', $this->selectedCounterId)
+                    ->whereIn('status', Queue::ACTIVE_STATUSES)
+                    ->whereDate('created_at', today())
+                    ->exists();
+                $targetCounterHasActiveQueue = Queue::query()
+                    ->where('counter_id', $targetCounter->id)
+                    ->whereIn('status', Queue::ACTIVE_STATUSES)
+                    ->whereDate('created_at', today())
+                    ->exists();
+
+                if ($currentCounterHasActiveQueue || $targetCounterHasActiveQueue) {
+                    $this->dispatch('notify', [
+                        'type' => 'warning',
+                        'message' => $currentCounterHasActiveQueue
+                            ? 'Selesaikan antrean aktif sebelum berpindah loket.'
+                            : $targetCounter->display_name.' sedang menangani antrean dan belum dapat dipilih.',
+                    ]);
+
+                    return;
+                }
+            }
+
+            $this->selectedCounterId = $targetCounter->id;
+            $this->selectedServiceId = $targetCounter->service_id;
+            $this->selectedZone = $targetCounter->name;
+
+            Log::info('Operator changed active work counter within service team', [
+                'user_id' => $user->id,
+                'assigned_counter_id' => $user->counter_id,
+                'active_counter_id' => $targetCounter->id,
+                'service_id' => $targetCounter->service_id,
+            ]);
 
             return;
         }
@@ -256,6 +317,24 @@ class DashboardCallKiosk extends Page
         ]);
 
         // Livewire akan otomatis me-render ulang komponen dengan data baru
+    }
+
+    private function operatorCanUseCounter($user, Counter $targetCounter): bool
+    {
+        if (! $user?->counter_id) {
+            return false;
+        }
+
+        if ((int) $targetCounter->id === (int) $user->counter_id) {
+            return true;
+        }
+
+        $assignedCounter = Counter::withoutGlobalScopes()->find($user->counter_id);
+
+        return $assignedCounter
+            && ! $targetCounter->is_archived
+            && (int) $assignedCounter->instansi_id === (int) $targetCounter->instansi_id
+            && (int) $assignedCounter->service_id === (int) $targetCounter->service_id;
     }
 
     public function selectZone(string $zoneName): void
@@ -284,6 +363,23 @@ class DashboardCallKiosk extends Page
 
         if (! $counter || ! $counter->callableServiceIds()->contains($serviceId)) {
             return;
+        }
+
+        if ((int) $serviceId !== (int) $this->selectedServiceId) {
+            $hasActiveQueue = Queue::query()
+                ->where('counter_id', $counter->id)
+                ->whereIn('status', Queue::ACTIVE_STATUSES)
+                ->whereDate('created_at', today())
+                ->exists();
+
+            if ($hasActiveQueue) {
+                $this->dispatch('notify', [
+                    'type' => 'warning',
+                    'message' => 'Selesaikan antrean aktif sebelum mengganti layanan bantuan.',
+                ]);
+
+                return;
+            }
         }
 
         $this->selectedServiceId = $serviceId;
@@ -605,6 +701,14 @@ class DashboardCallKiosk extends Page
         $audioConfig = app(AudioConfigurationService::class)->get();
         $callableServices = collect();
         $activeService = null;
+        $serviceTeamCounters = collect();
+        $assignedCounter = null;
+
+        if (Auth::user()?->isOperator() && Auth::user()?->counter_id) {
+            $assignedCounter = Counter::withoutGlobalScopes()
+                ->with(['service', 'instansi'])
+                ->find(Auth::user()->counter_id);
+        }
 
         // Hanya ambil data jika ada loket yang dipilih
         if ($this->selectedCounter) {
@@ -623,6 +727,44 @@ class DashboardCallKiosk extends Page
             $activeService = $callableServices->firstWhere('id', $this->selectedServiceId)
                 ?? $callableServices->first();
             $this->selectedServiceId = $activeService?->id;
+
+            // Tampilkan status rekan loket yang memakai jalur antrean utama yang sama.
+            // Query ini sengaja melewati scope operator, tetapi tetap dibatasi pada
+            // instansi dan layanan yang sama agar tidak membuka data loket lain.
+            if ($activeService && (int) $activeService->id === (int) $counter->service_id) {
+                $teamCounters = Counter::withoutGlobalScopes()
+                    ->where('instansi_id', $counter->instansi_id)
+                    ->where('service_id', $activeService->id)
+                    ->where('is_archived', false)
+                    ->orderBy('code_loket')
+                    ->get(['id', 'code_loket', 'name', 'is_active']);
+
+                if ($teamCounters->count() > 1) {
+                    $teamActiveQueues = Queue::query()
+                        ->whereIn('counter_id', $teamCounters->pluck('id'))
+                        ->whereIn('status', [Queue::STATUS_SERVING, Queue::STATUS_CALLED])
+                        ->whereDate('created_at', today())
+                        ->orderByRaw("CASE WHEN status = 'serving' THEN 1 WHEN status = 'called' THEN 2 ELSE 3 END")
+                        ->orderByDesc('called_at')
+                        ->get()
+                        ->unique('counter_id')
+                        ->keyBy('counter_id');
+
+                    $serviceTeamCounters = $teamCounters->map(function (Counter $teamCounter) use ($counter, $teamActiveQueues): array {
+                        $activeQueue = $teamActiveQueues->get($teamCounter->id);
+
+                        return [
+                            'id' => (int) $teamCounter->id,
+                            'display_name' => $teamCounter->display_name,
+                            'is_current' => (int) $teamCounter->id === (int) $counter->id,
+                            'is_assigned' => (int) $teamCounter->id === (int) Auth::user()?->counter_id,
+                            'is_active' => (bool) $teamCounter->is_active,
+                            'status' => $activeQueue?->status,
+                            'queue_number' => $activeQueue?->number,
+                        ];
+                    });
+                }
+            }
 
             $waitingCounts = Queue::query()
                 ->whereIn('service_id', $callableServices->pluck('id'))
@@ -686,6 +828,8 @@ class DashboardCallKiosk extends Page
             'stats' => $stats,
             'callableServices' => $callableServices,
             'activeService' => $activeService,
+            'serviceTeamCounters' => $serviceTeamCounters,
+            'assignedCounter' => $assignedCounter,
             'announcementOpeningAudioUrl' => $audioConfig['url'] ?? asset(config('audio.fallback.url', 'sounds/opening.mp3')),
             'ttsSettings' => $audioConfig['tts'] ?? [],
         ];

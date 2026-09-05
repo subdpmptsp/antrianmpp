@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Counter;
+use App\Models\Instansi;
 use App\Models\Queue;
 use App\Models\Service;
 use App\Services\QueueService;
@@ -140,15 +141,10 @@ class AnnouncementApiTest extends TestCase
 
     public function test_zone_tv_receives_only_calls_for_its_own_zone(): void
     {
-        [$service, $zoneCounter] = $this->createServiceAndCounter();
-        $zoneCounter->update(['name' => 'ZONA SATU']);
-        $otherCounter = Counter::query()->create([
-            'name' => 'ZONA DUA',
-            'service_id' => $service->id,
-            'is_active' => true,
-        ]);
+        [$service, $zoneCounter] = $this->createServiceAndCounter('ZONA SATU', 'A');
+        [$otherService, $otherCounter] = $this->createServiceAndCounter('ZONA DUA', 'B');
         Queue::query()->create([
-            'service_id' => $service->id,
+            'service_id' => $otherService->id,
             'counter_id' => $otherCounter->id,
             'number' => 'B-001',
             'status' => Queue::STATUS_CALLED,
@@ -167,17 +163,31 @@ class AnnouncementApiTest extends TestCase
             ->assertJsonPath('queueId', $zoneQueue->id);
     }
 
-    private function createServiceAndCounter(): array
+    private function createServiceAndCounter(string $zone = 'ZONA TEST', string $prefix = 'A'): array
     {
-        $counter = Counter::query()->create(['name' => 'ZONA TEST', 'is_active' => true]);
+        $instansi = Instansi::query()->create([
+            'nama_instansi' => 'INSTANSI '.$zone,
+            'zone' => $zone,
+            'is_active' => true,
+            'is_archived' => false,
+        ]);
+        $counter = Counter::query()->create([
+            'name' => $zone,
+            'instansi_id' => $instansi->getKey(),
+            'is_active' => false,
+            'is_archived' => false,
+        ]);
         $service = Service::query()->create([
-            'name' => 'LAYANAN TEST',
-            'prefix' => 'A',
+            'name' => 'LAYANAN '.$zone,
+            'prefix' => $prefix,
             'padding' => 3,
+            'instansi_id' => $instansi->getKey(),
             'counter_id' => $counter->id,
             'is_active' => true,
+            'is_archived' => false,
+            'is_accepting_queues' => true,
         ]);
-        $counter->update(['service_id' => $service->id]);
+        $counter->update(['service_id' => $service->id, 'is_active' => true]);
 
         return [$service, $counter];
     }

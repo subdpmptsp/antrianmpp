@@ -81,10 +81,19 @@ class KioskCatalogService
             ->selectRaw('COUNT(*)')
             ->whereColumn('usage_services.instansi_id', 'instansis.instansi_id')
             ->whereBetween('usage_queues.created_at', [$from, $until]);
+        $waitingQuery = DB::table('queues as waiting_queues')
+            ->join('services as waiting_services', 'waiting_services.id', '=', 'waiting_queues.service_id')
+            ->selectRaw('COUNT(*)')
+            ->whereColumn('waiting_services.instansi_id', 'instansis.instansi_id')
+            ->where('waiting_services.is_active', true)
+            ->where('waiting_services.is_archived', false)
+            ->where('waiting_queues.status', Queue::STATUS_WAITING)
+            ->whereBetween('waiting_queues.created_at', [now()->startOfDay(), now()->endOfDay()]);
 
         return Instansi::query()
             ->select('instansis.*')
             ->selectSub($usageQuery, 'monthly_queue_count')
+            ->selectSub($waitingQuery, 'waiting_queue_count')
             ->where('is_active', true)
             ->where('is_archived', false)
             ->whereHas('counters', fn ($query) => $query
@@ -148,12 +157,12 @@ class KioskCatalogService
         $consultationServices = $services
             ->filter(fn (Service $service): bool => in_array($service->prefix, ['3C-6', '3C-7'], true));
 
-        if ($consultationServices->isEmpty()) {
+        if ($services->isEmpty()) {
             return $services;
         }
 
         $counts = Queue::query()
-            ->whereIn('service_id', $consultationServices->pluck('id'))
+            ->whereIn('service_id', $services->pluck('id'))
             ->whereDate('created_at', today())
             ->whereIn('status', [
                 Queue::STATUS_PRINTING,
@@ -173,9 +182,7 @@ class KioskCatalogService
             $isConsultationCounter = in_array($service->prefix, ['3C-6', '3C-7'], true);
 
             $service->setAttribute('is_disdukcapil_consultation_counter', $isConsultationCounter);
-            $service->setAttribute('active_queue_count', $isConsultationCounter
-                ? (int) ($counts[$service->id] ?? 0)
-                : null);
+            $service->setAttribute('active_queue_count', (int) ($counts[$service->id] ?? 0));
             $service->setAttribute('is_recommended_consultation_counter', $isConsultationCounter
                 && (int) ($counts[$service->id] ?? 0) === $minimumCount);
 

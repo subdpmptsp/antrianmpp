@@ -30,7 +30,13 @@
         </span>
         <span class="queue-kiosk__institution-copy">
             <strong>{{ $instansi->nama_instansi }}</strong>
-            <small>{{ $instansi->active_services_count }} layanan tersedia</small>
+            <small>
+                @if ((int) ($instansi->waiting_queue_count ?? 0) > 0)
+                    {{ (int) $instansi->waiting_queue_count }} pemohon menunggu
+                @else
+                    Belum ada antrean menunggu
+                @endif
+            </small>
         </span>
 @if ($isLivewire)
     </button>

@@ -82,17 +82,36 @@
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-end">
                 @if($user?->isOperator())
                     @php
-                        $assignedCounter = $this->selectedCounter;
+                        $selectedCounter = $this->selectedCounter;
                     @endphp
                     <div class="lg:col-span-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
-                        <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Instansi & Layanan Tugas Anda</div>
+                        <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Status Tugas Petugas</div>
                         <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
-                            {{ $assignedCounter?->instansi?->nama_instansi ?? 'Instansi belum ditentukan' }}
+                            {{ $assignedCounter?->instansi?->nama_instansi ?? $selectedCounter?->instansi?->nama_instansi ?? 'Instansi belum ditentukan' }}
                         </div>
-                        <div class="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                            {{ $assignedCounter?->service?->name ?? 'Layanan belum ditentukan' }}
-                            <span class="mx-1.5">·</span>
-                            {{ $assignedCounter?->display_name ?? 'Loket belum ditentukan' }}
+                        <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <div class="rounded-lg border border-blue-100 bg-white/80 px-3 py-2 dark:border-blue-800 dark:bg-gray-800/70">
+                                <div class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Loket Saya</div>
+                                <div class="mt-0.5 text-sm font-bold text-gray-900 dark:text-white">
+                                    {{ $assignedCounter?->display_name ?? 'Belum ditentukan' }}
+                                    <span class="ml-1 text-xs font-medium {{ $assignedCounter?->is_active ? 'text-green-600' : 'text-red-600' }}">
+                                        {{ $assignedCounter?->is_active ? 'Aktif' : 'Nonaktif' }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="rounded-lg border border-blue-500 bg-blue-600 px-3 py-2 text-white shadow-sm">
+                                <div class="text-[10px] font-semibold uppercase tracking-wide text-blue-100">Loket Aktif</div>
+                                <div class="mt-0.5 text-sm font-bold">
+                                    {{ $selectedCounter?->display_name ?? 'Belum dipilih' }}
+                                    <span class="ml-1 text-xs font-medium text-blue-100">{{ $selectedCounter?->is_active ? 'Aktif' : 'Nonaktif' }}</span>
+                                </div>
+                            </div>
+                            <div class="rounded-lg border border-blue-100 bg-white/80 px-3 py-2 dark:border-blue-800 dark:bg-gray-800/70">
+                                <div class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Layanan Dipanggil</div>
+                                <div class="mt-0.5 truncate text-sm font-bold text-gray-900 dark:text-white">
+                                    {{ $activeService?->name ?? 'Belum ditentukan' }}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 @else
@@ -138,40 +157,101 @@
                 <div class="lg:col-span-2 space-y-6">
                     @if ($callableServices->count() > 1)
                         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-                            <div class="flex items-center justify-between gap-3 mb-3">
+                            <div class="mb-3 flex items-center justify-between gap-3">
                                 <div>
-                                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Layanan yang dapat dipanggil</h3>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">Pilih layanan untuk memuat antrean dan tombol panggil yang sesuai.</p>
+                                    <label for="callable-service" class="text-sm font-semibold text-gray-900 dark:text-white">Layanan yang akan dipanggil</label>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">Pilih satu layanan bantuan. Tujuan tetap ke loket aktif.</p>
                                 </div>
-                                <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                                    Panggilan menuju {{ $selectedCounter->display_name }}
+                                <span class="hidden rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 sm:inline-flex">
+                                    Menuju {{ $selectedCounter->display_name }}
                                 </span>
                             </div>
-                            <div class="flex flex-wrap gap-2" role="tablist" aria-label="Pilihan layanan loket">
-                                @foreach ($callableServices as $service)
+                            <div class="relative">
+                                <select
+                                    id="callable-service"
+                                    wire:change="selectServiceTab(Number($event.target.value))"
+                                    class="w-full appearance-none rounded-xl border border-gray-300 bg-white py-3 pl-4 pr-12 text-sm font-semibold text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                    style="background-image: none !important; background-repeat: no-repeat !important;"
+                                >
+                                    @foreach ($callableServices as $service)
+                                        <option value="{{ $service->id }}" @selected((int) $selectedServiceId === (int) $service->id)>
+                                            {{ $service->prefix }} — {{ $service->name }} — {{ $service->waiting_count }} menunggu
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <svg class="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6" />
+                                </svg>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if ($serviceTeamCounters->count() > 1)
+                        <div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                            <div class="mb-3">
+                                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                                    Tim loket {{ $activeService?->name }}
+                                </h3>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">
+                                    Pilih loket kerja. Akun login tetap sama dan tujuan TV mengikuti loket aktif.
+                                </p>
+                            </div>
+
+                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                @foreach ($serviceTeamCounters as $teamCounter)
+                                    @php
+                                        $isServing = $teamCounter['status'] === \App\Models\Queue::STATUS_SERVING;
+                                        $isCalling = $teamCounter['status'] === \App\Models\Queue::STATUS_CALLED;
+                                    @endphp
                                     <button
                                         type="button"
-                                        wire:click="selectServiceTab({{ $service->id }})"
-                                        style="{{ $selectedServiceId === $service->id ? 'background-color: #2563eb !important; border-color: #1d4ed8 !important; color: #ffffff !important;' : '' }}"
+                                        wire:click="selectCounter({{ $teamCounter['id'] }})"
+                                        @disabled(! $teamCounter['is_active'])
                                         @class([
-                                            'relative rounded-xl border-2 px-4 py-3 text-left transition-all duration-200',
-                                            'border-blue-700 pt-8 pr-16 text-white shadow-lg ring-2 ring-blue-200 dark:ring-blue-900' => $selectedServiceId === $service->id,
-                                            'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600' => $selectedServiceId !== $service->id,
+                                            'w-full rounded-xl border-2 px-4 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2',
+                                            'cursor-pointer hover:border-blue-400 hover:shadow-md' => $teamCounter['is_active'] && ! $teamCounter['is_current'],
+                                            'cursor-not-allowed opacity-60' => ! $teamCounter['is_active'],
+                                            'border-blue-600 bg-blue-600 text-white shadow-md' => $teamCounter['is_current'],
+                                            'border-green-300 bg-green-50 text-gray-900 dark:border-green-700 dark:bg-green-900/20 dark:text-white' => ! $teamCounter['is_current'] && $isServing,
+                                            'border-amber-300 bg-amber-50 text-gray-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-white' => ! $teamCounter['is_current'] && $isCalling,
+                                            'border-gray-200 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white' => ! $teamCounter['is_current'] && ! $isServing && ! $isCalling,
                                         ])
                                     >
-                                        @if ($selectedServiceId === $service->id)
-                                            <span class="absolute right-2 top-2 rounded-full bg-white/20 px-2 py-1 text-[10px] font-bold uppercase leading-none tracking-wide text-white">Aktif</span>
-                                        @endif
-                                        <span class="block text-xs font-semibold opacity-80">{{ $service->prefix }}</span>
-                                        <span class="block text-sm font-semibold">{{ $service->name }}</span>
-                                        <span class="mt-1 inline-block text-xs {{ $selectedServiceId === $service->id ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400' }}">
-                                            {{ $service->waiting_count }} menunggu
-                                        </span>
-                                        @if ($selectedServiceId === $service->id)
-                                            <span class="mt-1 block text-[11px] font-medium text-blue-100">
-                                                Dipanggil dari {{ $selectedCounter->display_name }}
-                                            </span>
-                                        @endif
+                                        <div class="flex items-start justify-between gap-3">
+                                            <div>
+                                                <div class="text-sm font-bold">{{ $teamCounter['display_name'] }}</div>
+                                                <div @class([
+                                                    'mt-1 text-xs',
+                                                    'text-blue-100' => $teamCounter['is_current'],
+                                                    'text-gray-500 dark:text-gray-300' => ! $teamCounter['is_current'],
+                                                ])>
+                                                    @if (! $teamCounter['is_active'])
+                                                        Loket nonaktif
+                                                    @elseif ($isServing)
+                                                        Melayani {{ $teamCounter['queue_number'] }}
+                                                    @elseif ($isCalling)
+                                                        Memanggil {{ $teamCounter['queue_number'] }}
+                                                    @else
+                                                        Siap membantu
+                                                    @endif
+                                                </div>
+                                            </div>
+                                            @if ($teamCounter['is_current'])
+                                                <span class="rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                                                    Loket Aktif
+                                                </span>
+                                            @elseif ($teamCounter['is_assigned'])
+                                                <span class="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">
+                                                    Akun Anda
+                                                </span>
+                                            @elseif ($isServing)
+                                                <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-green-500" title="Sedang melayani"></span>
+                                            @elseif ($isCalling)
+                                                <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500" title="Sedang memanggil"></span>
+                                            @else
+                                                <span class="h-2.5 w-2.5 shrink-0 rounded-full {{ $teamCounter['is_active'] ? 'bg-gray-300' : 'bg-red-400' }}" title="{{ $teamCounter['is_active'] ? 'Siap membantu' : 'Loket nonaktif' }}"></span>
+                                            @endif
+                                        </div>
                                     </button>
                                 @endforeach
                             </div>
@@ -605,12 +685,22 @@
 
             const normalizeAnnouncement = (data) => {
                 const digitWords = ['nol', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan']
-                const queueRaw = String(data?.queueNumber || 'Tidak diketahui')
-                const queueNumber = queueRaw
+                const letterWords = {
+                    A: 'a', B: 'be', C: 'ce', D: 'de', E: 'e', F: 'ef', G: 'ge', H: 'ha', I: 'i', J: 'je',
+                    K: 'ka', L: 'el', M: 'em', N: 'en', O: 'o', P: 'pe', Q: 'ki', R: 'er', S: 'es', T: 'te',
+                    U: 'u', V: 've', W: 'we', X: 'eks', Y: 'ye', Z: 'zet',
+                }
+                const spellCode = (value) => String(value || '')
                     .split(/[^a-zA-Z0-9]+/)
                     .filter(Boolean)
-                    .map((part) => [...part].map((char) => /\d/.test(char) ? digitWords[Number(char)] : char.toUpperCase()).join(' '))
+                    .map((part) => [...part].map((char) => {
+                        if (/\d/.test(char)) return digitWords[Number(char)]
+
+                        return letterWords[char.toUpperCase()] || char
+                    }).join(' '))
                     .join(' ')
+                const queueRaw = String(data?.queueNumber || 'Tidak diketahui')
+                const queueNumber = spellCode(queueRaw)
                 const serviceName = String(data?.serviceName || 'Layanan').toLowerCase()
                     // Ejaan berjarak membuat semua singkatan dibaca per huruf.
                     .replace(/\bikd\b/gi, 'I K D')
@@ -620,7 +710,7 @@
                 const zoneOneCounter = counterName.match(/^Loket\s+Z1-(\d{2})$/i)
                 const counterNameForSpeech = zoneOneCounter
                     ? `loket ${Number(zoneOneCounter[1])}`
-                    : counterName
+                    : `loket ${spellCode(counterName.replace(/^Loket\s+/i, '')) || 'tujuan'}`
                 const zone = String(data?.zona || 'Zona')
                 const zoneText = zone.toUpperCase() === 'UPTSP' ? 'U-P-T-S-P' : zone.toLowerCase()
                 const finalServiceName = serviceName.includes('layanan') ? serviceName : `layanan ${serviceName}`
