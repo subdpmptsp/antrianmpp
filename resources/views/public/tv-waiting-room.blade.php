@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $mppBranding['name'] ?? config('app.name') }} — TV Ruang Tunggu</title>
+    @include('partials.siola-q-favicon')
     @vite(['resources/css/app.css'])
 </head>
 <body>

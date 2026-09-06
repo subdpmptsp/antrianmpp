@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>{{ $mppBranding['name'] ?? config('app.name') }} — Status Antrian</title>
+    @include('partials.siola-q-favicon')
     @vite(['resources/css/app.css'])
 </head>
 

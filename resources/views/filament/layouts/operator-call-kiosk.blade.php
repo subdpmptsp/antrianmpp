@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $mppBranding['name'] ?? 'Mal Pelayanan Publik Siola' }} — Loket Panggilan</title>
+    @include('partials.siola-q-favicon')
     @vite(['resources/css/app.css'])
     @filamentStyles
     @livewireStyles

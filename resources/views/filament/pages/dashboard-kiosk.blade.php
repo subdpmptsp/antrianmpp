@@ -57,10 +57,12 @@
             </div>
 
             <div class="tv-display__controls">
-                <label class="tv-display__speed-control">
-                    <span>Kecepatan gulir</span>
-                    <input type="range" min="8" max="60" step="2" value="24" data-tv-speed-control aria-label="Kecepatan gulir antrean">
-                </label>
+                @unless ($isPublicDisplay)
+                    <label class="tv-display__speed-control">
+                        <span>Kecepatan gulir</span>
+                        <input type="range" min="8" max="60" step="2" value="24" data-tv-speed-control aria-label="Kecepatan gulir antrean">
+                    </label>
+                @endunless
                 <div class="tv-display__datetime">
                     <strong data-tv-clock>--:--:--</strong>
                     <span data-tv-date>Memuat tanggal...</span>
@@ -186,23 +188,21 @@
         .tv-display__fullscreen { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 9px; }
         .tv-display__fullscreen svg { width: 20px; fill: none; stroke: currentColor; stroke-width: 2; }
         .tv-display__back { padding: .55rem .75rem; border-radius: 8px; font-weight: 700; text-decoration: none; }
-        .tv-display__layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr); gap: clamp(1rem, 1.7vw, 1.7rem); padding: clamp(1rem, 2vw, 1.8rem); border: 1px solid #d4e1f0; border-top: 0; background: rgba(255,255,255,.72); }
-        .tv-current-card, .tv-queue-card { border: 1px solid #d7e1ee; border-radius: 18px; overflow: hidden; background: #fff; box-shadow: 0 12px 28px rgba(31, 73, 125, .08); }
-        .tv-current-card { height: auto; min-height: min(68vh, 680px); }
-        .tv-queue-card { height: min(68vh, 680px); min-height: 0; }
-        .tv-current-card { display: flex; flex-direction: column; align-items: center; padding: clamp(1.5rem, 3.5vw, 3.7rem); text-align: center; }
+        .tv-display__layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr); align-items: stretch; gap: clamp(1rem, 1.7vw, 1.7rem); padding: clamp(1rem, 2vw, 1.8rem); border: 1px solid #d4e1f0; border-top: 0; background: rgba(255,255,255,.72); }
+        .tv-current-card, .tv-queue-card { height: min(68vh, 680px); min-height: 560px; border: 1px solid #d7e1ee; border-radius: 18px; overflow: hidden; background: #fff; box-shadow: 0 12px 28px rgba(31, 73, 125, .08); }
+        .tv-current-card { box-sizing: border-box; display: flex; flex-direction: column; align-items: center; padding: clamp(1rem, 2vw, 2rem); text-align: center; }
         .tv-current-card__label { align-self: stretch; padding: .65rem 1rem; border-radius: 11px; color: #fff; background: linear-gradient(90deg, #1769d5, #3a8df4); box-shadow: 0 6px 14px rgba(33, 104, 207, .18); font-size: clamp(.9rem, 1.5vw, 1.2rem); font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
-        .tv-current-card__number { box-sizing: border-box; flex: 0 0 auto; display: grid; place-items: center; width: min(100%, 610px); min-height: clamp(132px, 19vh, 220px); margin: clamp(1rem, 2vw, 1.8rem) auto; padding: .25rem 1rem; border: 2px solid #4a92ee; border-radius: 18px; color: #104f9f; background: #cfe3fd; font-size: clamp(3.5rem, 8vw, 8rem); font-weight: 900; line-height: .92; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tv-current-card__number { box-sizing: border-box; flex: 0 0 auto; display: grid; place-items: center; width: min(100%, 610px); min-height: clamp(120px, 16vh, 190px); margin: clamp(.75rem, 1.4vw, 1.25rem) auto; padding: .25rem 1rem; border: 2px solid #4a92ee; border-radius: 18px; color: #104f9f; background: #cfe3fd; font-size: clamp(3.5rem, 8vw, 8rem); font-weight: 900; line-height: .92; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .tv-current-card__number.is-empty { color: #8a9bb3; background: #f1f5fa; border-color: #d9e1eb; }
         .tv-current-card__service strong, .tv-current-card__service span { display: block; }
         .tv-current-card__service strong { font-size: clamp(1.15rem, 2.1vw, 1.75rem); }
         .tv-current-card__service span { margin-top: .4rem; color: #6380a8; font-size: clamp(.9rem, 1.5vw, 1.2rem); }
-        .tv-current-card__duration { margin: clamp(1.2rem, 2vw, 2rem) 0; }
+        .tv-current-card__duration { margin: clamp(.7rem, 1.3vw, 1.2rem) 0; }
         .tv-current-card__duration span, .tv-current-card__duration strong { display: block; }
         .tv-current-card__duration span { color: #6a7f9f; font-size: .95rem; }
         .tv-current-card__duration strong { margin-top: .35rem; color: #1555ad; font-size: clamp(1.7rem, 3vw, 2.8rem); }
         .tv-current-card__duration.is-waiting strong { color: #6a7f9f; font-size: clamp(1rem, 1.8vw, 1.35rem); }
-        .tv-current-card__summary { width: 100%; margin: .9rem 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .tv-current-card__summary { width: 100%; margin: auto 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
         .tv-current-card__summary div { padding: 1rem; border-radius: 13px; background: #f8fbff; }
         .tv-current-card__summary .is-next { color: #175f32; background: #cceecb; }
         .tv-current-card__summary span, .tv-current-card__summary strong { display: block; }
@@ -254,8 +254,9 @@
             let announcementPollInProgress = false
             let announcementStorageKey = null
             const tvAudioStartedAt = Date.now()
-            let previousTime = performance.now()
-            let scrollTop = 0
+            let activeScrollList = null
+            let scrollPosition = 0
+            let previousScrollTime = performance.now()
             let pauseUntil = 0
 
             const updateClock = () => {
@@ -412,23 +413,34 @@
             const scrollQueueList = (time) => {
                 const list = document.querySelector('[data-tv-scroll-list]')
                 const root = document.querySelector('[data-tv-display]')
-                const elapsed = Math.min(80, time - previousTime)
-                previousTime = time
+                const elapsed = Math.min(80, time - previousScrollTime)
+                previousScrollTime = time
 
-                if (list && root && list.scrollHeight > list.clientHeight) {
-                    const maximum = list.scrollHeight - list.clientHeight
-                    const speed = Number(root.dataset.scrollSpeed || 24)
+                if (list && root) {
+                    const maximum = Math.max(0, list.scrollHeight - list.clientHeight)
 
-                    if (time >= pauseUntil) {
-                        scrollTop += (speed * elapsed) / 1000
-                        if (scrollTop >= maximum) {
-                            scrollTop = 0
-                            pauseUntil = time + 1400
-                        }
-                        list.scrollTop = scrollTop
+                    // Live refresh dapat mengganti elemen daftar. Pertahankan posisi
+                    // gulir tanpa menggandakan data/DOM antrean.
+                    if (activeScrollList !== list) {
+                        activeScrollList = list
+                        scrollPosition = Math.min(scrollPosition, maximum)
+                        list.scrollTop = scrollPosition
                     }
-                } else {
-                    scrollTop = 0
+
+                    if (maximum > 1 && time >= pauseUntil) {
+                        const speed = Number(root.dataset.scrollSpeed || 24)
+                        scrollPosition += (speed * elapsed) / 1000
+
+                        if (scrollPosition >= maximum) {
+                            scrollPosition = 0
+                            pauseUntil = time + 1200
+                        }
+
+                        list.scrollTop = scrollPosition
+                    } else if (maximum <= 1) {
+                        scrollPosition = 0
+                        list.scrollTop = 0
+                    }
                 }
 
                 window.requestAnimationFrame(scrollQueueList)

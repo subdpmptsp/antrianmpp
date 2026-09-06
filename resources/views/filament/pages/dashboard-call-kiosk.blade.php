@@ -714,6 +714,12 @@
                 const zone = String(data?.zona || 'Zona')
                 const zoneText = zone.toUpperCase() === 'UPTSP' ? 'U-P-T-S-P' : zone.toLowerCase()
                 const finalServiceName = serviceName.includes('layanan') ? serviceName : `layanan ${serviceName}`
+                const institutionName = String(data?.institutionName || '').trim()
+                const useInstitutionAnnouncement = data?.useInstitutionAnnouncement === true
+                    && institutionName !== ''
+                const text = useInstitutionAnnouncement
+                    ? `nomor antrean ${queueNumber}, ${institutionName}, silakan menuju ${counterNameForSpeech}`
+                    : `nomor antrean ${queueNumber}, silakan menuju ${counterNameForSpeech}, untuk ${finalServiceName}`
 
                 return {
                     queueNumber,
@@ -722,7 +728,7 @@
                     counterNameForSpeech,
                     zone,
                     zoneText,
-                    text: `nomor antrean ${queueNumber}, silakan menuju ${counterNameForSpeech}, untuk ${finalServiceName}`,
+                    text,
                 }
             }
 

@@ -506,6 +506,10 @@ class DashboardCallKiosk extends Page
                 'serviceName' => $serviceName,
                 'servicePrefix' => $servicePrefix,
                 'counterName' => $this->selectedCounter->display_name,
+                // Uji coba pengumuman khusus Bursa Tenaga Kerja di loket 4k1.
+                // Loket lain tetap menggunakan format pengumuman layanan yang ada.
+                'institutionName' => $this->selectedCounter->instansi?->nama_instansi,
+                'useInstitutionAnnouncement' => strtolower((string) $this->selectedCounter->code_loket) === '4k1',
                 'zona' => $zonaName,
                 'calledAt' => now()->format('H:i:s'),
             ];
@@ -568,6 +572,9 @@ class DashboardCallKiosk extends Page
             'serviceName' => $serviceName,
             'servicePrefix' => $servicePrefix,
             'counterName' => $this->selectedCounter->display_name,
+            // Panggilan ulang harus memakai format yang identik dengan panggilan pertama.
+            'institutionName' => $this->selectedCounter->instansi?->nama_instansi,
+            'useInstitutionAnnouncement' => strtolower((string) $this->selectedCounter->code_loket) === '4k1',
             'zona' => $zonaName,
             'calledAt' => now()->format('H:i:s'),
         ];

@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#092650">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $mppBranding['name'] }} — Ambil Nomor Antrean</title>
+    @include('partials.siola-q-favicon')
     @vite(['resources/css/app.css'])
     @include('kiosk.partials.styles')
 </head>
