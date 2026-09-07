@@ -28,9 +28,14 @@ class PublicQueueKioskController extends Controller
         $request->session()->put('queue_request_token', $queueRequestToken);
 
         $instansis = $this->catalog->rankedInstitutions();
-        $institutionColumns = $this->catalog->splitInstitutions($instansis);
+        $kioskInstitutionEntries = $this->catalog->institutionEntries($instansis);
+        $bpjsInstansis = $instansis
+            ->whereIn('nama_instansi', config('kiosk.bpjs_institutions', []))
+            ->sortBy(fn ($institution) => array_search($institution->nama_instansi, config('kiosk.bpjs_institutions', []), true))
+            ->values();
 
         $selectedInstansi = $request->integer('instansi') ?: null;
+        $showBpjsChoices = ! $selectedInstansi && $request->boolean('bpjs') && $bpjsInstansis->isNotEmpty();
         $selectedInstitution = $selectedInstansi
             ? $instansis->firstWhere('instansi_id', $selectedInstansi)
             : null;
@@ -65,8 +70,9 @@ class PublicQueueKioskController extends Controller
         return response()->view('public.queue-kiosk', [
             'selectedInstansi' => $selectedInstansi,
             'instansis' => $instansis,
-            'popularInstansis' => $institutionColumns['popular'],
-            'otherInstansis' => $institutionColumns['others'],
+            'kioskInstitutionEntries' => $kioskInstitutionEntries,
+            'bpjsInstansis' => $bpjsInstansis,
+            'showBpjsChoices' => $showBpjsChoices,
             'services' => $services,
             'queueRequestToken' => $queueRequestToken,
         ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')

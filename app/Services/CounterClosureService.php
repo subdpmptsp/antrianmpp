@@ -4,13 +4,21 @@ namespace App\Services;
 
 use App\Models\Counter;
 use App\Models\CounterClosureRequest;
+use App\Models\Service;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class CounterClosureService
 {
-    public function requestClose(Counter $counter, User $user, string $reason, bool $autoReopen = true): CounterClosureRequest
+    public function requestClose(
+        Counter $counter,
+        User $user,
+        string $reason,
+        bool $autoReopen = true,
+        ?Carbon $scheduledReopenAt = null,
+    ): CounterClosureRequest
     {
         if ((int) $user->counter_id !== (int) $counter->id && ! $user->isAdmin()) {
             throw ValidationException::withMessages(['reason' => 'Anda hanya dapat mengajukan penutupan loket yang ditugaskan kepada Anda.']);
@@ -26,7 +34,13 @@ class CounterClosureService
             throw ValidationException::withMessages(['reason' => 'Alasan penutupan loket wajib diisi, maksimal 1.000 karakter.']);
         }
 
-        return DB::transaction(function () use ($counter, $user, $reason, $autoReopen): CounterClosureRequest {
+        if ($scheduledReopenAt && $scheduledReopenAt->lessThanOrEqualTo(now('Asia/Jakarta'))) {
+            throw ValidationException::withMessages([
+                'scheduled_reopen_at' => 'Waktu aktif kembali harus setelah waktu saat ini.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($counter, $user, $reason, $autoReopen, $scheduledReopenAt): CounterClosureRequest {
             $hasPendingRequest = CounterClosureRequest::query()
                 ->where('counter_id', $counter->id)
                 ->where('status', CounterClosureRequest::STATUS_PENDING)
@@ -42,16 +56,35 @@ class CounterClosureService
                 'service_id' => $counter->service_id,
                 'requested_by_user_id' => $user->id,
                 'reason' => $reason,
-                'auto_reopen' => $autoReopen,
+                'auto_reopen' => $scheduledReopenAt ? false : $autoReopen,
+                'scheduled_reopen_at' => $scheduledReopenAt,
+                // Fitur jeda seluruh layanan belum diaktifkan pada operasional.
+                'closes_service_queues' => false,
                 'status' => CounterClosureRequest::STATUS_PENDING,
                 'requested_at' => now(),
             ]);
         });
     }
 
-    public function approve(CounterClosureRequest $request, User $admin, ?string $note = null): void
+    public function approve(
+        CounterClosureRequest $request,
+        User $admin,
+        ?string $note = null,
+    ): void
     {
         $this->ensureAdmin($admin);
+
+        if ($request->closes_service_queues && ! $request->scheduled_reopen_at) {
+            throw ValidationException::withMessages([
+                'scheduled_reopen_at' => 'Waktu layanan dibuka kembali wajib diisi untuk istirahat sementara.',
+            ]);
+        }
+
+        if ($request->scheduled_reopen_at && $request->scheduled_reopen_at->lessThanOrEqualTo(now('Asia/Jakarta'))) {
+            throw ValidationException::withMessages([
+                'scheduled_reopen_at' => 'Waktu aktif kembali harus setelah waktu saat ini.',
+            ]);
+        }
 
         DB::transaction(function () use ($request, $admin, $note): void {
             $request = CounterClosureRequest::query()->lockForUpdate()->findOrFail($request->id);
@@ -66,6 +99,10 @@ class CounterClosureService
                 'reviewed_by_user_id' => $admin->id,
                 'reviewed_at' => now(),
             ]);
+
+            if ($request->closes_service_queues) {
+                $this->pauseServiceQueues($request->service_id, $request->scheduled_reopen_at, $request->reason);
+            }
 
             $this->syncServiceQueueAvailability($request->service_id);
         });
@@ -87,6 +124,29 @@ class CounterClosureService
             'reviewed_by_user_id' => $admin->id,
             'reviewed_at' => now(),
         ]);
+    }
+
+    /**
+     * Menutup administrasi pengajuan lama yang belum ditinjau. Pengajuan
+     * pending tidak pernah mengubah status loket, sehingga proses ini hanya
+     * membebaskan petugas untuk dapat mengajukan kembali pada hari kerja baru.
+     */
+    public function expirePending(CounterClosureRequest $closureRequest): bool
+    {
+        return DB::transaction(function () use ($closureRequest): bool {
+            $request = CounterClosureRequest::query()->lockForUpdate()->findOrFail($closureRequest->id);
+
+            if ($request->status !== CounterClosureRequest::STATUS_PENDING) {
+                return false;
+            }
+
+            $request->update([
+                'status' => CounterClosureRequest::STATUS_EXPIRED,
+                'admin_note' => 'Kedaluwarsa otomatis pada awal hari operasional berikutnya karena belum ditinjau admin.',
+            ]);
+
+            return true;
+        });
     }
 
     public function reopen(Counter $counter, User $user): void
@@ -128,7 +188,10 @@ class CounterClosureService
         $reopened = DB::transaction(function () use ($closureRequest): bool {
             $request = CounterClosureRequest::query()->lockForUpdate()->findOrFail($closureRequest->id);
 
-            if ($request->status !== CounterClosureRequest::STATUS_APPROVED || ! $request->auto_reopen) {
+            $scheduledReopenDue = $request->scheduled_reopen_at
+                && $request->scheduled_reopen_at->lessThanOrEqualTo(now('Asia/Jakarta'));
+
+            if ($request->status !== CounterClosureRequest::STATUS_APPROVED || (! $request->auto_reopen && ! $scheduledReopenDue)) {
                 return false;
             }
 
@@ -152,11 +215,57 @@ class CounterClosureService
         return $reopened;
     }
 
+    /** Hapus penutupan layanan sementara yang waktunya sudah berakhir. */
+    public function clearExpiredServiceQueuePauses(): int
+    {
+        $now = now('Asia/Jakarta');
+        $services = Service::query()
+            ->where('queue_override', 'force_closed')
+            ->whereNotNull('queue_override_until')
+            ->where('queue_override_until', '<=', $now)
+            ->get();
+
+        foreach ($services as $service) {
+            $service->update([
+                'queue_override' => null,
+                'queue_override_reason' => null,
+                'queue_override_until' => null,
+            ]);
+        }
+
+        if ($services->isNotEmpty()) {
+            app(MasterDataCache::class)->invalidate();
+        }
+
+        return $services->count();
+    }
+
     private function ensureAdmin(User $user): void
     {
         if (! $user->isAdmin()) {
             abort(403);
         }
+    }
+
+    /**
+     * Penutupan ini berada di level layanan: kartu tetap terlihat di kiosk,
+     * tetapi penerbitan nomor ditolak sampai waktu yang ditentukan admin.
+     */
+    private function pauseServiceQueues(int $serviceId, Carbon $until, string $reason): void
+    {
+        $service = Service::query()->lockForUpdate()->findOrFail($serviceId);
+        $currentUntil = $service->queue_override === 'force_closed'
+            ? $service->queue_override_until
+            : null;
+        $effectiveUntil = $currentUntil && $currentUntil->greaterThan($until)
+            ? $currentUntil
+            : $until;
+
+        $service->update([
+            'queue_override' => 'force_closed',
+            'queue_override_reason' => 'Istirahat sementara: '.$reason,
+            'queue_override_until' => $effectiveUntil,
+        ]);
     }
 
     /**

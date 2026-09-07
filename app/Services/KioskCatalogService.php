@@ -7,7 +7,6 @@ use App\Models\Instansi;
 use App\Models\Queue;
 use App\Models\Service;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 class KioskCatalogService
 {
@@ -58,42 +57,10 @@ class KioskCatalogService
         });
     }
 
-    /**
-     * Instansi aktif, diurutkan menurut total tiket bulan berjalan.
-     * Jumlah layanan aktif menjadi pembeda yang stabil ketika total tiket sama.
-     *
-     * @return Collection<int, Instansi>
-     */
+    /** @return Collection<int, Instansi> */
     public function rankedInstitutions(): Collection
     {
-        // Katalog hanya memuat sekitar puluhan instansi dan menjadi pintu utama kiosk.
-        // Membacanya langsung lebih aman daripada mempertahankan cache lama setelah admin
-        // menambah layanan atau memindahkan relasi loket.
-        return $this->queryRankedInstitutions();
-    }
-
-    private function queryRankedInstitutions(): Collection
-    {
-        $from = now()->startOfMonth();
-        $until = now()->endOfDay();
-        $usageQuery = DB::table('queues as usage_queues')
-            ->join('services as usage_services', 'usage_services.id', '=', 'usage_queues.service_id')
-            ->selectRaw('COUNT(*)')
-            ->whereColumn('usage_services.instansi_id', 'instansis.instansi_id')
-            ->whereBetween('usage_queues.created_at', [$from, $until]);
-        $waitingQuery = DB::table('queues as waiting_queues')
-            ->join('services as waiting_services', 'waiting_services.id', '=', 'waiting_queues.service_id')
-            ->selectRaw('COUNT(*)')
-            ->whereColumn('waiting_services.instansi_id', 'instansis.instansi_id')
-            ->where('waiting_services.is_active', true)
-            ->where('waiting_services.is_archived', false)
-            ->where('waiting_queues.status', Queue::STATUS_WAITING)
-            ->whereBetween('waiting_queues.created_at', [now()->startOfDay(), now()->endOfDay()]);
-
         return Instansi::query()
-            ->select('instansis.*')
-            ->selectSub($usageQuery, 'monthly_queue_count')
-            ->selectSub($waitingQuery, 'waiting_queue_count')
             ->where('is_active', true)
             ->where('is_archived', false)
             ->whereHas('counters', fn ($query) => $query
@@ -103,46 +70,53 @@ class KioskCatalogService
             ->whereHas('services', fn ($query) => $query
                 ->where('is_active', true)
                 ->where('is_archived', false))
-            ->withCount([
-                'services as active_services_count' => fn ($query) => $query
-                    ->where('is_active', true)
-                    ->where('is_archived', false),
-            ])
-            ->orderByDesc('monthly_queue_count')
-            ->orderByDesc('active_services_count')
             ->orderBy('nama_instansi')
             ->get();
     }
 
     /**
-     * @return array{popular: Collection<int, Instansi>, others: Collection<int, Instansi>}
+     * Membentuk katalog tetap. Instansi yang ditambahkan di masa depan tetap
+     * dapat diakses di bagian paling bawah, tanpa menggeser posisi utama.
+     *
+     * @return array<int, array{type: 'institution'|'bpjs', instansi_id?: int}>
      */
-    public function splitInstitutions(Collection $institutions): array
+    public function institutionEntries(Collection $institutions): array
     {
-        $maximum = max(1, min(8, (int) config('kiosk.popular_institution_count', 6)));
-        $minimumTotal = config('kiosk.popular_minimum_total');
+        $configuredNames = collect(config('kiosk.institution_order', []));
+        $bpjsNames = collect(config('kiosk.bpjs_institutions', []));
+        $institutionsByName = $institutions->keyBy('nama_instansi');
+        $usedIds = collect();
+        $entries = [];
 
-        $popular = $institutions->take($maximum);
+        foreach ($configuredNames as $name) {
+            if ($name === 'bpjs') {
+                if ($institutions->contains(fn (Instansi $institution): bool => $bpjsNames->contains($institution->nama_instansi))) {
+                    $entries[] = ['type' => 'bpjs'];
+                }
 
-        if ($minimumTotal !== null) {
-            $aboveThreshold = $institutions
-                ->filter(fn (Instansi $instansi): bool => (int) $instansi->monthly_queue_count >= (int) $minimumTotal)
-                ->take($maximum);
+                continue;
+            }
 
-            // Awal bulan tidak boleh menghasilkan kolom populer yang kosong.
-            if ($aboveThreshold->isNotEmpty()) {
-                $popular = $aboveThreshold;
+            $institution = $institutionsByName->get($name);
+            if ($institution) {
+                $entries[] = ['type' => 'institution', 'instansi_id' => $institution->instansi_id];
+                $usedIds->push($institution->instansi_id);
             }
         }
 
-        $popularIds = $popular->pluck('instansi_id');
+        $remainingInstitutions = $institutions
+            ->reject(fn (Instansi $institution): bool => $usedIds->contains($institution->instansi_id)
+                || $bpjsNames->contains($institution->nama_instansi))
+            ->sortBy('nama_instansi');
 
-        return [
-            'popular' => $popular->values(),
-            'others' => $institutions
-                ->reject(fn (Instansi $instansi): bool => $popularIds->contains($instansi->instansi_id))
-                ->values(),
-        ];
+        foreach ($remainingInstitutions as $institution) {
+            $entries[] = [
+                'type' => 'institution',
+                'instansi_id' => $institution->instansi_id,
+            ];
+        }
+
+        return $entries;
     }
 
     /**

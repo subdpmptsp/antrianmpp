@@ -458,8 +458,10 @@
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-6">Status Loket</h3>
                         @if($selectedCounter)
                             @php
-                                $isAcceptingQueues = (bool) ($selectedCounter->service?->is_accepting_queues);
                                 $pendingClosureRequest = $this->pendingClosureRequest;
+                                $approvedClosureRequest = $this->approvedClosureRequest;
+                                $isAcceptingQueues = ! $approvedClosureRequest
+                                    && (bool) ($selectedCounter->service?->is_accepting_queues);
                             @endphp
                             <div class="text-center">
                                 <div class="w-20 h-20 bg-gradient-to-br from-{{ $isAcceptingQueues ? 'green' : 'amber' }}-500 to-{{ $isAcceptingQueues ? 'green' : 'amber' }}-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
@@ -503,22 +505,72 @@
                                     @error('closeReason')
                                         <p class="-mt-2 mb-3 text-xs font-medium text-red-600 dark:text-red-400">{{ $message }}</p>
                                     @enderror
-                                    <label class="mb-3 flex cursor-pointer items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 p-3 text-left dark:border-blue-900/50 dark:bg-blue-900/20">
-                                        <input type="checkbox" wire:model="autoReopenCounter" class="mt-0.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500">
-                                        <span class="text-xs text-blue-800 dark:text-blue-200">
-                                            <span class="block font-semibold">Buka otomatis pada hari operasional berikutnya</span>
-                                            <span>Pukul 00.05. Hilangkan centang untuk tetap tutup sampai dibuka manual.</span>
+                                    <label class="mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left dark:border-amber-900/50 dark:bg-amber-900/20">
+                                        <span class="text-xs text-amber-900 dark:text-amber-100">
+                                            <span class="block font-semibold">Istirahat sementara</span>
+                                            <span>Aktifkan untuk menentukan jam loket menerima antrean kembali hari ini.</span>
+                                        </span>
+                                        <span class="relative inline-flex shrink-0 items-center">
+                                            <input type="checkbox" wire:model.live="temporaryBreak" class="peer sr-only">
+                                            <span class="h-6 w-11 rounded-full bg-gray-300 transition-colors duration-200 ease-out peer-checked:bg-green-500 dark:bg-gray-600"></span>
+                                            <span class="absolute left-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-out peer-checked:translate-x-5"></span>
                                         </span>
                                     </label>
+                                    @if($temporaryBreak)
+                                        <div class="mb-3 rounded-xl border border-green-200 bg-green-50 p-3 text-left dark:border-green-900/50 dark:bg-green-900/20">
+                                            <label for="temporary-reopen-time" class="mb-1 block text-xs font-semibold text-green-900 dark:text-green-100">Loket menerima antrean kembali pada pukul</label>
+                                            <input id="temporary-reopen-time" type="time" wire:model="temporaryReopenTime"
+                                                class="w-full rounded-lg border border-green-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-green-700 dark:bg-gray-800 dark:text-white">
+                                            @error('temporaryReopenTime')
+                                                <p class="mt-1 text-xs font-medium text-red-600 dark:text-red-400">{{ $message }}</p>
+                                            @enderror
+                                        </div>
+                                    @else
+                                        <label class="mb-3 flex cursor-pointer items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 p-3 text-left dark:border-blue-900/50 dark:bg-blue-900/20">
+                                            <input type="checkbox" wire:model="autoReopenCounter" class="mt-0.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500">
+                                            <span class="text-xs text-blue-800 dark:text-blue-200">
+                                                <span class="block font-semibold">Buka otomatis pada hari operasional berikutnya</span>
+                                                <span>Pukul 00.05. Hilangkan centang untuk tetap tutup sampai dibuka manual.</span>
+                                            </span>
+                                        </label>
+                                    @endif
                                     <button wire:click="requestCounterClosure"
                                         class="w-full bg-red-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-red-600 transition-colors duration-200 shadow-lg hover:shadow-xl">
                                         Ajukan Tutup Loket
                                     </button>
                                 @else
-                                    <button wire:click="reopenCounter"
-                                        class="w-full bg-green-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-green-600 transition-colors duration-200 shadow-lg hover:shadow-xl">
-                                        Buka Loket
-                                    </button>
+                                    <x-filament::modal
+                                        id="reopen-counter-confirmation"
+                                        width="sm"
+                                        alignment="center"
+                                        icon="heroicon-o-exclamation-triangle"
+                                        icon-color="success"
+                                        heading="Buka loket?"
+                                        description="Apakah Anda yakin akan membuka loket dan menerima antrean baru?"
+                                    >
+                                        <x-slot name="trigger">
+                                            <button type="button"
+                                                class="w-full bg-green-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-green-600 transition-colors duration-200 shadow-lg hover:shadow-xl">
+                                                Buka Loket
+                                            </button>
+                                        </x-slot>
+
+                                        <x-slot name="footer">
+                                            <div class="flex w-full gap-3">
+                                                <button type="button"
+                                                    x-on:click="$dispatch('close-modal', { id: 'reopen-counter-confirmation' })"
+                                                    class="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700">
+                                                    Batal
+                                                </button>
+                                                <button type="button"
+                                                    wire:click="reopenCounter"
+                                                    x-on:click="$dispatch('close-modal', { id: 'reopen-counter-confirmation' })"
+                                                    class="flex-1 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">
+                                                    Ya, buka loket
+                                                </button>
+                                            </div>
+                                        </x-slot>
+                                    </x-filament::modal>
                                 @endif
                             </div>
                         @else
@@ -690,13 +742,29 @@
                     K: 'ka', L: 'el', M: 'em', N: 'en', O: 'o', P: 'pe', Q: 'ki', R: 'er', S: 'es', T: 'te',
                     U: 'u', V: 've', W: 'we', X: 'eks', Y: 'ye', Z: 'zet',
                 }
+                const spellNumber = (value) => {
+                    // Kode dengan nol di depan tetap dieja per digit, misalnya 01.
+                    if (value.length > 1 && value.startsWith('0')) return [...value].map((digit) => digitWords[Number(digit)]).join(' ')
+
+                    const number = Number(value)
+                    if (!Number.isInteger(number) || number < 0 || number > 99) return [...value].map((digit) => digitWords[Number(digit)]).join(' ')
+                    if (number < 10) return digitWords[number]
+                    if (number === 10) return 'sepuluh'
+                    if (number === 11) return 'sebelas'
+                    if (number < 20) return `${digitWords[number - 10]} belas`
+
+                    const tens = Math.floor(number / 10)
+                    const units = number % 10
+
+                    return `${digitWords[tens]} puluh${units ? ` ${digitWords[units]}` : ''}`
+                }
                 const spellCode = (value) => String(value || '')
                     .split(/[^a-zA-Z0-9]+/)
                     .filter(Boolean)
-                    .map((part) => [...part].map((char) => {
-                        if (/\d/.test(char)) return digitWords[Number(char)]
+                    .map((part) => (part.match(/[a-zA-Z]+|\d+/g) || []).map((segment) => {
+                        if (/^\d+$/.test(segment)) return spellNumber(segment)
 
-                        return letterWords[char.toUpperCase()] || char
+                        return [...segment].map((char) => letterWords[char.toUpperCase()] || char).join(' ')
                     }).join(' '))
                     .join(' ')
                 const queueRaw = String(data?.queueNumber || 'Tidak diketahui')

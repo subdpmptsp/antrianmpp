@@ -5,9 +5,9 @@
     $selectedInstitution = $selectedInstansi
         ? $instansis->firstWhere('instansi_id', $selectedInstansi)
         : null;
-    $popularInstitutions = collect($popularInstansis ?? $instansis->take(6));
-    $otherInstitutions = collect($otherInstansis ?? $instansis->skip($popularInstitutions->count()));
-    $sizePreview = request()->boolean('preview');
+    $kioskInstitutionEntries = collect($kioskInstitutionEntries ?? []);
+    $bpjsInstansis = collect($bpjsInstansis ?? []);
+    $showBpjsChoices = (bool) ($showBpjsChoices ?? false);
 @endphp
 
 <div
@@ -46,6 +46,26 @@
     <main class="queue-kiosk__main">
         <section class="queue-kiosk__content">
             @if (! $selectedInstansi)
+                @if ($showBpjsChoices)
+                    <div class="queue-kiosk__intro">
+                        <h2>Pilih layanan BPJS</h2>
+                        <p>Sentuh jenis layanan BPJS yang Anda butuhkan.</p>
+                    </div>
+                    <div class="queue-kiosk__bpjs-back">
+                        @if ($isLivewire)
+                            <button type="button" wire:click="resetSelection">Kembali ke daftar instansi</button>
+                        @else
+                            <a data-kiosk-navigation href="{{ route('public.queue-kiosk') }}">Kembali ke daftar instansi</a>
+                        @endif
+                    </div>
+                    <div class="queue-kiosk__institution-grid queue-kiosk__institution-grid--bpjs">
+                        @forelse ($bpjsInstansis as $instansi)
+                            @include('kiosk.partials.institution-card', ['instansi' => $instansi, 'variant' => 'catalog', 'isLivewire' => $isLivewire])
+                        @empty
+                            <div class="queue-kiosk__empty"><h3>Layanan BPJS belum tersedia</h3><p>Silakan hubungi petugas layanan.</p></div>
+                        @endforelse
+                    </div>
+                @else
                 <div class="queue-kiosk__intro">
                     <h2>Instansi apa yang Anda tuju?</h2>
                     <p>Sentuh salah satu pilihan di bawah ini.</p>
@@ -57,46 +77,28 @@
                         <p>Silakan hubungi petugas layanan.</p>
                     </div>
                 @else
-                    @if ($sizePreview)
-                        <div class="queue-kiosk__size-preview" data-kiosk-size-preview>
-                            <strong>Mode uji ukuran</strong>
-                            <label>Kartu populer <output data-size-output="popular">72</output> px<input type="range" min="56" max="140" value="72" data-size-control="popular"></label>
-                            <label>Kartu lainnya <output data-size-output="other">68</output> px<input type="range" min="52" max="120" value="68" data-size-control="other"></label>
-                            <label>Logo populer <output data-size-output="popular-logo">46</output> px<input type="range" min="30" max="72" value="46" data-size-control="popular-logo"></label>
-                            <label>Logo lainnya <output data-size-output="other-logo">34</output> px<input type="range" min="24" max="56" value="34" data-size-control="other-logo"></label>
-                        </div>
-                    @endif
-                    <div class="queue-kiosk__institution-layout" data-kiosk-institution-grid>
-                        <section class="queue-kiosk__institution-section queue-kiosk__institution-section--popular" aria-labelledby="popular-institutions-title">
-                            <div class="queue-kiosk__section-heading">
-                                <span class="queue-kiosk__section-icon queue-kiosk__section-icon--popular">
-                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c4.2 0 7-3 7-7.2 0-3.1-1.8-5.9-5.2-8.8.1 2.5-.8 4.1-2.1 5.1.1-3.7-2-6.8-5.1-9.1.2 4-1.6 6.5-2.1 8.6C3.5 14.6 6.1 22 12 22Z"/></svg>
-                                </span>
-                                <div><h3 id="popular-institutions-title">Layanan populer</h3><p>Paling sering dikunjungi bulan ini</p></div>
-                            </div>
-                            <div class="queue-kiosk__popular-list">
-                                @foreach ($popularInstitutions as $instansi)
-                                    @include('kiosk.partials.institution-card', ['instansi' => $instansi, 'variant' => 'popular', 'isLivewire' => $isLivewire])
-                                @endforeach
-                            </div>
-                        </section>
-
-                        <section class="queue-kiosk__institution-section queue-kiosk__institution-section--others" aria-labelledby="other-institutions-title">
-                            <div class="queue-kiosk__section-heading">
-                                <span class="queue-kiosk__section-icon">
-                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V8l7-4 7 4v13M8 11h2m4 0h2m-8 4h2m4 0h2m-6 6v-3h4v3"/></svg>
-                                </span>
-                                <div><h3 id="other-institutions-title">Instansi lainnya</h3><p>Diurutkan berdasarkan aktivitas layanan</p></div>
-                            </div>
-                            <div class="queue-kiosk__other-grid">
-                                @forelse ($otherInstitutions as $instansi)
-                                    @include('kiosk.partials.institution-card', ['instansi' => $instansi, 'variant' => 'compact', 'isLivewire' => $isLivewire])
-                                @empty
-                                    <div class="queue-kiosk__section-empty">Semua instansi tersedia pada layanan populer.</div>
-                                @endforelse
-                            </div>
-                        </section>
+                    <div class="queue-kiosk__institution-grid" data-kiosk-institution-grid>
+                        @foreach ($kioskInstitutionEntries as $entry)
+                            @if ($entry['type'] === 'bpjs')
+                                @if ($isLivewire)
+                                    <button type="button" class="queue-kiosk__institution-card queue-kiosk__institution-card--catalog" wire:click="selectBpjs">
+                                @else
+                                    <a class="queue-kiosk__institution-card queue-kiosk__institution-card--catalog" data-kiosk-navigation href="{{ route('public.queue-kiosk', ['bpjs' => 1]) }}">
+                                @endif
+                                        <span class="queue-kiosk__institution-logo is-fallback"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 4v12m-6-6h12"/></svg></span>
+                                        <span class="queue-kiosk__institution-copy"><strong>BPJS</strong><small>Pilih jenis layanan</small></span>
+                                @if ($isLivewire)</button>@else</a>@endif
+                            @else
+                                @php
+                                    $instansi = $instansis->firstWhere('instansi_id', $entry['instansi_id']);
+                                @endphp
+                                @if ($instansi)
+                                    @include('kiosk.partials.institution-card', ['instansi' => $instansi, 'variant' => 'catalog', 'isLivewire' => $isLivewire])
+                                @endif
+                            @endif
+                        @endforeach
                     </div>
+                @endif
                 @endif
 
             @else

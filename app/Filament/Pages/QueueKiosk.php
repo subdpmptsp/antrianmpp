@@ -30,9 +30,11 @@ class QueueKiosk extends Page
 
     public $services;
 
-    public $popularInstansis;
+    public $kioskInstitutionEntries;
 
-    public $otherInstansis;
+    public $bpjsInstansis;
+
+    public bool $showBpjsChoices = false;
 
     public static function canAccess(): bool
     {
@@ -47,10 +49,17 @@ class QueueKiosk extends Page
     public function mount(KioskCatalogService $catalog): void
     {
         $this->instansis = $catalog->rankedInstitutions();
-        $institutionColumns = $catalog->splitInstitutions($this->instansis);
-        $this->popularInstansis = $institutionColumns['popular'];
-        $this->otherInstansis = $institutionColumns['others'];
+        $this->kioskInstitutionEntries = $catalog->institutionEntries($this->instansis);
+        $this->bpjsInstansis = $this->instansis
+            ->whereIn('nama_instansi', config('kiosk.bpjs_institutions', []))
+            ->sortBy(fn ($institution) => array_search($institution->nama_instansi, config('kiosk.bpjs_institutions', []), true))
+            ->values();
         $this->services = collect();
+    }
+
+    public function selectBpjs(): void
+    {
+        $this->showBpjsChoices = true;
     }
 
     public function selectInstansi(int $instansiId): void
@@ -64,6 +73,7 @@ class QueueKiosk extends Page
         }
 
         $this->selectedInstansi = $instansiId;
+        $this->showBpjsChoices = false;
         $services = Service::query()
             ->where('instansi_id', $instansiId)
             ->where('is_active', true)
@@ -117,6 +127,7 @@ class QueueKiosk extends Page
     public function resetSelection(): void
     {
         $this->selectedInstansi = null;
+        $this->showBpjsChoices = false;
         $this->services = collect();
     }
 

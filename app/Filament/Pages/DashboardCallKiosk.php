@@ -9,6 +9,7 @@ use App\Models\Service;
 use App\Services\AudioConfigurationService;
 use App\Services\CounterClosureService;
 use App\Services\QueueService;
+use Carbon\Carbon;
 use Filament\Pages\Page;
 use Illuminate\Contracts\View\View; // Penting untuk method render
 use Illuminate\Support\Facades\Auth;
@@ -50,6 +51,8 @@ class DashboardCallKiosk extends Page
     public ?string $selectedZone = null;
     public ?string $closeReason = null;
     public bool $autoReopenCounter = true;
+    public bool $temporaryBreak = false;
+    public ?string $temporaryReopenTime = null;
 
     /**
      * Method `mount` dijalankan sekali saat komponen pertama kali dimuat.
@@ -234,6 +237,23 @@ class DashboardCallKiosk extends Page
             ->where('counter_id', $this->selectedCounter->id)
             ->where('status', CounterClosureRequest::STATUS_PENDING)
             ->latest('requested_at')
+            ->first();
+    }
+
+    /**
+     * Status penutupan harus dibaca per loket. Status layanan dapat tetap
+     * menerima antrean bila loket lain dalam layanan yang sama masih aktif.
+     */
+    public function getApprovedClosureRequestProperty(): ?CounterClosureRequest
+    {
+        if (! $this->selectedCounter) {
+            return null;
+        }
+
+        return CounterClosureRequest::query()
+            ->where('counter_id', $this->selectedCounter->id)
+            ->where('status', CounterClosureRequest::STATUS_APPROVED)
+            ->latest('reviewed_at')
             ->first();
     }
 
@@ -657,15 +677,35 @@ class DashboardCallKiosk extends Page
 
         $this->resetErrorBag('closeReason');
 
+        if ($this->temporaryBreak) {
+            $this->validate([
+                'temporaryReopenTime' => ['required', 'date_format:H:i'],
+            ], [
+                'temporaryReopenTime.required' => 'Jam loket aktif kembali wajib diisi.',
+                'temporaryReopenTime.date_format' => 'Format jam aktif kembali tidak valid.',
+            ]);
+        }
+
+        $scheduledReopenAt = $this->temporaryBreak
+            ? Carbon::createFromFormat(
+                'Y-m-d H:i',
+                now('Asia/Jakarta')->format('Y-m-d').' '.$this->temporaryReopenTime,
+                'Asia/Jakarta',
+            )
+            : null;
+
         try {
             $closureService->requestClose(
                 $this->selectedCounter,
                 Auth::user(),
                 (string) $this->closeReason,
                 $this->autoReopenCounter,
+                $scheduledReopenAt,
             );
             $this->closeReason = null;
             $this->autoReopenCounter = true;
+            $this->temporaryBreak = false;
+            $this->temporaryReopenTime = null;
             $this->dispatch('notify', [
                 'type' => 'success',
                 'message' => 'Permintaan tutup loket sudah dikirim dan menunggu persetujuan admin.',
@@ -676,6 +716,14 @@ class DashboardCallKiosk extends Page
                 'message' => collect($exception->errors())->flatten()->first() ?? 'Permintaan tidak dapat diproses.',
             ]);
         }
+    }
+
+    public function updatedTemporaryBreak(bool $temporaryBreak): void
+    {
+        if ($temporaryBreak && blank($this->temporaryReopenTime)) {
+            $this->temporaryReopenTime = now('Asia/Jakarta')->addHour()->startOfHour()->format('H:i');
+        }
+
     }
 
     public function reopenCounter(CounterClosureService $closureService): void

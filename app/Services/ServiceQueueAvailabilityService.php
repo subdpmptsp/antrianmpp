@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Holiday;
 use App\Models\Counter;
+use App\Models\CounterClosureRequest;
 use App\Models\Queue;
 use App\Models\QueueOperatingSetting;
 use App\Models\Service;
@@ -17,8 +18,27 @@ class ServiceQueueAvailabilityService
     {
         $now = ($at ?: now())->setTimezone('Asia/Jakarta');
 
-        if (! $service->is_active || $service->is_archived || ! $service->is_accepting_queues) {
+        if (! $service->is_active || $service->is_archived) {
             return $this->closed('Layanan ini sedang tidak menerima nomor antrean.', 'service_closed');
+        }
+
+        if ($service->queue_override === 'force_closed'
+            && (! $service->queue_override_until || $service->queue_override_until->greaterThanOrEqualTo($now))) {
+            $until = $service->queue_override_until?->copy()->setTimezone('Asia/Jakarta');
+            $message = 'Layanan ini sedang istirahat.';
+            if ($until) {
+                $message .= ' Pengambilan antrean dibuka kembali pukul '.$until->format('H.i').' WIB.';
+            }
+
+            return $this->closed($message, 'temporary_service_closed');
+        }
+
+        if (! $service->is_accepting_queues) {
+            return $this->closed(
+                $this->scheduledCounterReopenMessage($service, $now)
+                    ?? 'Layanan ini sedang tidak menerima nomor antrean.',
+                'service_closed',
+            );
         }
 
         $service->loadMissing('instansi');
@@ -126,6 +146,40 @@ class ServiceQueueAvailabilityService
         if (! is_string($value) || $value === '') return null;
 
         return Carbon::createFromFormat('Y-m-d H:i', $date->toDateString().' '.substr($value, 0, 5), 'Asia/Jakarta');
+    }
+
+    /**
+     * Bila seluruh layanan tertutup akibat pengajuan istirahat sementara,
+     * tampilkan jam buka yang benar di kiosk. Penutupan manual tidak memiliki
+     * jadwal ini, sehingga tetap memakai pesan umum agar tidak menyesatkan.
+     */
+    private function scheduledCounterReopenMessage(Service $service, Carbon $now): ?string
+    {
+        $counterIds = Counter::withoutGlobalScopes()
+            ->where('service_id', $service->id)
+            ->where('is_active', true)
+            ->where('is_archived', false)
+            ->pluck('id');
+
+        if ($counterIds->isEmpty()) {
+            return null;
+        }
+
+        $reopenAt = CounterClosureRequest::query()
+            ->whereIn('counter_id', $counterIds)
+            ->where('status', CounterClosureRequest::STATUS_APPROVED)
+            ->whereNotNull('scheduled_reopen_at')
+            ->where('scheduled_reopen_at', '>=', $now)
+            ->min('scheduled_reopen_at');
+
+        if (! $reopenAt) {
+            return null;
+        }
+
+        $until = Carbon::parse($reopenAt, 'Asia/Jakarta');
+
+        return 'Layanan sedang istirahat. Pengambilan antrean akan dibuka kembali pukul '
+            .$until->format('H.i').' WIB.';
     }
 
     /** @param array<int, mixed> $schedule */

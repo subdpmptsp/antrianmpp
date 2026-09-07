@@ -1,11 +1,37 @@
 <?php
 
 return [
-    // Jumlah instansi teratas berdasarkan total tiket bulan berjalan.
-    'popular_institution_count' => (int) env('KIOSK_POPULAR_INSTITUTION_COUNT', 4),
+    /*
+     * Urutan halaman awal kiosk adalah keputusan operasional, bukan ranking
+     * jumlah antrean. Nilai "bpjs" adalah satu kartu virtual yang membuka
+     * pilihan BPJS Kesehatan dan BPJS Ketenagakerjaan.
+     */
+    'institution_order' => [
+        'Dinas Kependudukan dan Pencatatan Sipil',
+        'UPTSP',
+        'Kepolisian Resor Kota Besar (Polrestabes)',
+        'Klinik Investasi',
+        'bpjs',
+        'Direktorat Jenderal Pajak',
+        'Dinas Lingkungan Hidup',
+        'Dinas Perhubungan',
+        'Badan Pendapatan Daerah',
+        'Dinas Perumahan Rakyat dan Kawasan Permukiman serta Pertanahan (DPRKPP)',
+        'Pengadilan Agama',
+        'Bagian Pengadaan Barang/Jasa dan Administrasi Pembangunan (BPBJAP)',
+        'Badan Narkotika Surabaya',
+        'PT Pos Indonesia',
+        'Perumda Air Minum Surya Sembada',
+        'Bursa Efek dan BNI Sekuritas',
+        'Kantor Pertanahan Kota Surabaya',
+        'Kejaksaan Negeri Tanjung Perak',
+        'Kejaksaan Negeri Surabaya',
+        'Pengadilan Tata Usaha Negeri Surabaya',
+        'Pengadilan Negeri Surabaya',
+    ],
 
-    // Opsional: jika diisi, hanya instansi yang melewati angka ini yang masuk populer.
-    'popular_minimum_total' => env('KIOSK_POPULAR_MINIMUM_TOTAL') !== null
-        ? (int) env('KIOSK_POPULAR_MINIMUM_TOTAL')
-        : null,
+    'bpjs_institutions' => [
+        'BPJS Kesehatan',
+        'BPJS Ketenagakerjaan',
+    ],
 ];

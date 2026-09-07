@@ -31,7 +31,9 @@
         <span class="queue-kiosk__institution-copy">
             <strong>{{ $instansi->nama_instansi }}</strong>
             <small>
-                @if ((int) ($instansi->waiting_queue_count ?? 0) > 0)
+                @if ($variant === 'catalog')
+                    Pilih layanan
+                @elseif ((int) ($instansi->waiting_queue_count ?? 0) > 0)
                     {{ (int) $instansi->waiting_queue_count }} pemohon menunggu
                 @else
                     Belum ada antrean menunggu

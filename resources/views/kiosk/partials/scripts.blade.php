@@ -40,9 +40,9 @@
         const errorOverlay = root.querySelector('[data-kiosk-error]')
         const errorMessage = root.querySelector('[data-kiosk-error-message]')
         const serviceButtons = [...root.querySelectorAll('[data-kiosk-service]')]
-        const sizePreview = root.querySelector('[data-kiosk-size-preview]')
         let processing = false
         let idleTimer = null
+        let availabilityRefreshTimer = null
 
         // Navigasi antar langkah kiosk dilakukan tanpa memuat ulang dokumen.
         // Ini penting untuk Edge/Chrome: fullscreen browser dilepas jika terjadi
@@ -79,24 +79,6 @@
             }
         }
         window.__queueKioskNavigate = navigateWithinKiosk
-
-        if (sizePreview) {
-            const cssVariables = {
-                popular: '--kiosk-popular-height',
-                other: '--kiosk-other-height',
-                'popular-logo': '--kiosk-popular-logo',
-                'other-logo': '--kiosk-other-logo',
-            }
-            sizePreview.querySelectorAll('[data-size-control]').forEach((control) => {
-                const update = () => {
-                    const key = control.dataset.sizeControl
-                    root.style.setProperty(cssVariables[key], `${control.value}px`)
-                    const output = sizePreview.querySelector(`[data-size-output="${key}"]`)
-                    if (output) output.textContent = control.value
-                }
-                control.addEventListener('input', update, { signal })
-            })
-        }
 
         const setLoading = (visible) => {
             loading?.classList.toggle('is-visible', visible)
@@ -242,6 +224,19 @@
         window.addEventListener('offline', updateConnection, { signal })
         window.__queueKioskClock = window.setInterval(updateClock, 30000)
 
+        // Saat layanan ditutup sementara oleh admin, kiosk memperbarui kartu
+        // layanan paling lambat satu menit sekali ketika sedang diam. Satu
+        // request ringan ini membuat pesan istirahat dan pembukaan kembali
+        // muncul otomatis tanpa mengganggu proses cetak yang sedang berjalan.
+        if (root.dataset.mode === 'public' && root.dataset.step === '2') {
+            availabilityRefreshTimer = window.setInterval(() => {
+                if (processing) return
+
+                const currentUrl = `${window.location.pathname}${window.location.search}`
+                window.__queueKioskNavigate?.(currentUrl, false)
+            }, 60000)
+        }
+
         const resetIdleTimer = () => {
             if (root.dataset.step === '1' || processing) return
             window.clearTimeout(idleTimer)
@@ -253,6 +248,7 @@
 
         signal.addEventListener('abort', () => {
             window.clearInterval(window.__queueKioskClock)
+            window.clearInterval(availabilityRefreshTimer)
             window.clearTimeout(idleTimer)
         }, { once: true })
     }

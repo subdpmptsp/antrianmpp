@@ -9,6 +9,7 @@ class CounterClosureRequest extends Model
     public const STATUS_PENDING = 'pending';
     public const STATUS_APPROVED = 'approved';
     public const STATUS_REJECTED = 'rejected';
+    public const STATUS_EXPIRED = 'expired';
     public const STATUS_REOPENED = 'reopened';
 
     protected $fillable = [
@@ -17,6 +18,8 @@ class CounterClosureRequest extends Model
         'requested_by_user_id',
         'reason',
         'auto_reopen',
+        'scheduled_reopen_at',
+        'closes_service_queues',
         'status',
         'admin_note',
         'reviewed_by_user_id',
@@ -30,6 +33,8 @@ class CounterClosureRequest extends Model
     {
         return [
             'auto_reopen' => 'boolean',
+            'scheduled_reopen_at' => 'datetime',
+            'closes_service_queues' => 'boolean',
             'requested_at' => 'datetime',
             'reviewed_at' => 'datetime',
             'reopened_at' => 'datetime',

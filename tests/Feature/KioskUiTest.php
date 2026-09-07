@@ -42,8 +42,6 @@ class KioskUiTest extends TestCase
         $this->get(route('public.queue-kiosk'))
             ->assertOk()
             ->assertSee('Instansi apa yang Anda tuju?')
-            ->assertSee('Layanan populer')
-            ->assertSee('Instansi lainnya')
             ->assertSee($institution->nama_instansi)
             ->assertSee('data-kiosk-root', false)
             ->assertSee('data-kiosk-fullscreen', false)
@@ -53,9 +51,8 @@ class KioskUiTest extends TestCase
             ->assertDontSee('Konfirmasi pilihan');
     }
 
-    public function test_kiosk_popular_column_uses_current_month_queue_totals(): void
+    public function test_kiosk_catalog_order_does_not_use_current_month_queue_totals(): void
     {
-        config()->set('kiosk.popular_institution_count', 1);
         [$popularInstitution, $popularService] = $this->createInstitutionWithService('Instansi Paling Ramai', 'R');
         [$otherInstitution] = $this->createInstitutionWithService('Instansi Lebih Sepi', 'S');
 
@@ -68,10 +65,13 @@ class KioskUiTest extends TestCase
         }
 
         $catalog = app(KioskCatalogService::class);
-        $columns = $catalog->splitInstitutions($catalog->rankedInstitutions());
+        $orderedInstitutionIds = collect($catalog->institutionEntries($catalog->rankedInstitutions()))
+            ->where('type', 'institution')
+            ->pluck('instansi_id')
+            ->filter(fn (int $id): bool => in_array($id, [$popularInstitution->instansi_id, $otherInstitution->instansi_id], true))
+            ->values();
 
-        $this->assertSame($popularInstitution->instansi_id, $columns['popular']->first()->instansi_id);
-        $this->assertTrue($columns['others']->contains('instansi_id', $otherInstitution->instansi_id));
+        $this->assertSame([$otherInstitution->instansi_id, $popularInstitution->instansi_id], $orderedInstitutionIds->all());
     }
 
     public function test_kiosk_guides_users_from_institution_to_direct_print_service_selection(): void

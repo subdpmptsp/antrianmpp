@@ -287,13 +287,29 @@
                     K: 'ka', L: 'el', M: 'em', N: 'en', O: 'o', P: 'pe', Q: 'ki', R: 'er', S: 'es', T: 'te',
                     U: 'u', V: 've', W: 'we', X: 'eks', Y: 'ye', Z: 'zet',
                 }
+                const spellNumber = (value) => {
+                    // Kode dengan nol di depan tetap dieja per digit, misalnya 01.
+                    if (value.length > 1 && value.startsWith('0')) return [...value].map((digit) => digitWords[Number(digit)]).join(' ')
+
+                    const number = Number(value)
+                    if (!Number.isInteger(number) || number < 0 || number > 99) return [...value].map((digit) => digitWords[Number(digit)]).join(' ')
+                    if (number < 10) return digitWords[number]
+                    if (number === 10) return 'sepuluh'
+                    if (number === 11) return 'sebelas'
+                    if (number < 20) return `${digitWords[number - 10]} belas`
+
+                    const tens = Math.floor(number / 10)
+                    const units = number % 10
+
+                    return `${digitWords[tens]} puluh${units ? ` ${digitWords[units]}` : ''}`
+                }
                 const spellCode = (value) => String(value || '')
                     .split(/[^a-zA-Z0-9]+/)
                     .filter(Boolean)
-                    .map((part) => [...part].map((character) => {
-                        if (/\d/.test(character)) return digitWords[Number(character)]
+                    .map((part) => (part.match(/[a-zA-Z]+|\d+/g) || []).map((segment) => {
+                        if (/^\d+$/.test(segment)) return spellNumber(segment)
 
-                        return letterWords[character.toUpperCase()] || character
+                        return [...segment].map((character) => letterWords[character.toUpperCase()] || character).join(' ')
                     }).join(' '))
                     .join(' ')
                 const queueNumber = spellCode(data?.queueNumber)
