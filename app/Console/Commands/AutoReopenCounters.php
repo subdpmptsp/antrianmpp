@@ -23,10 +23,7 @@ class AutoReopenCounters extends Command
             ->where('status', CounterClosureRequest::STATUS_APPROVED)
             ->where(function ($query) use ($today, $now): void {
                 $query
-                    ->where(function ($autoReopen) use ($today): void {
-                        $autoReopen->where('auto_reopen', true)
-                            ->where('reviewed_at', '<', $today);
-                    })
+                    ->where('reviewed_at', '<', $today)
                     ->orWhere(function ($scheduled) use ($now): void {
                         $scheduled->whereNotNull('scheduled_reopen_at')
                             ->where('scheduled_reopen_at', '<=', $now);

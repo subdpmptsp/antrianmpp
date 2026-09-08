@@ -20,6 +20,8 @@ class AttendanceRangeExport implements FromCollection, ShouldAutoSize, WithHeadi
         private readonly string $search = '',
         private readonly ?int $instansiId = null,
         private readonly string $status = 'all',
+        private readonly ?string $zoneId = null,
+        private readonly ?int $workDaysPerWeek = null,
     ) {}
 
     public function collection(): Collection
@@ -30,12 +32,14 @@ class AttendanceRangeExport implements FromCollection, ShouldAutoSize, WithHeadi
             $this->search,
             $this->instansiId,
             $this->status,
+            $this->zoneId,
+            $this->workDaysPerWeek,
         );
     }
 
     public function headings(): array
     {
-        return ['Tanggal', 'Nama Petugas', 'Instansi', 'Status', 'Jam Login'];
+        return ['Tanggal', 'Nama Petugas', 'Instansi', 'Zona', 'Status', 'Jam Login'];
     }
 
     public function map($row): array
@@ -44,6 +48,7 @@ class AttendanceRangeExport implements FromCollection, ShouldAutoSize, WithHeadi
             Carbon::parse($row['date'])->format('d-m-Y'),
             $row['name'],
             $row['instansi'],
+            $row['zone'] ?? '-',
             match ($row['status']) {
                 'present' => 'Hadir',
                 'absent' => 'Belum/Tidak Hadir',

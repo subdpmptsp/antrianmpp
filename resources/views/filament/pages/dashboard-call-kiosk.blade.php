@@ -8,6 +8,19 @@
         .animate-pulse-slow {
             animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
+
+        @keyframes closure-schedule-attention {
+            0%, 100% { transform: translateX(0); }
+            15%, 45%, 75% { transform: translateX(-7px); }
+            30%, 60%, 90% { transform: translateX(7px); }
+        }
+
+        .closure-schedule-required {
+            animation: closure-schedule-attention 0.5s ease-in-out 2;
+            border-color: #ef4444 !important;
+            background-color: #fff1f2 !important;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.18);
+        }
         
         .card-hover {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -378,7 +391,7 @@
                             <div class="flex items-center justify-between mb-4">
                                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Daftar Antrian</h3>
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-                                    {{ $waitingQueues->count() }} Menunggu
+                                    {{ $waitingQueues->total() }} Menunggu
                                 </span>
                             </div>
                             
@@ -448,13 +461,38 @@
                                 </div>
                             @endforelse
                         </div>
+
+                        @if ($waitingQueues->hasPages())
+                            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 dark:border-gray-700 px-5 py-4">
+                                <p class="text-sm text-gray-500 dark:text-gray-400">
+                                    Menampilkan {{ $waitingQueues->firstItem() }}–{{ $waitingQueues->lastItem() }} dari {{ $waitingQueues->total() }} antrean
+                                </p>
+                                <div class="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        wire:click="previousPage('waitingQueuePage')"
+                                        @disabled($waitingQueues->onFirstPage())
+                                        class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                    >Sebelumnya</button>
+                                    <span class="text-sm text-gray-500 dark:text-gray-400">
+                                        {{ $waitingQueues->currentPage() }}/{{ $waitingQueues->lastPage() }}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        wire:click="nextPage('waitingQueuePage')"
+                                        @disabled(! $waitingQueues->hasMorePages())
+                                        class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                    >Berikutnya</button>
+                                </div>
+                            </div>
+                        @endif
                     </div>
                 </div>
 
                 <!-- Sidebar -->
                 <div class="lg:col-span-1 space-y-6">
                     <!-- Counter Status -->
-                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 card-hover">
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-6">Status Loket</h3>
                         @if($selectedCounter)
                             @php
@@ -499,46 +537,91 @@
                                         Menunggu persetujuan admin: {{ $pendingClosureRequest->reason }}
                                     </div>
                                 @elseif($isAcceptingQueues)
-                                    <textarea wire:model="closeReason" rows="3" maxlength="1000"
-                                        placeholder="Contoh: gangguan sistem pusat."
-                                        class="w-full mb-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-white"></textarea>
-                                    @error('closeReason')
-                                        <p class="-mt-2 mb-3 text-xs font-medium text-red-600 dark:text-red-400">{{ $message }}</p>
-                                    @enderror
-                                    <label class="mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left dark:border-amber-900/50 dark:bg-amber-900/20">
-                                        <span class="text-xs text-amber-900 dark:text-amber-100">
-                                            <span class="block font-semibold">Istirahat sementara</span>
-                                            <span>Aktifkan untuk menentukan jam loket menerima antrean kembali hari ini.</span>
-                                        </span>
-                                        <span class="relative inline-flex shrink-0 items-center">
-                                            <input type="checkbox" wire:model.live="temporaryBreak" class="peer sr-only">
-                                            <span class="h-6 w-11 rounded-full bg-gray-300 transition-colors duration-200 ease-out peer-checked:bg-green-500 dark:bg-gray-600"></span>
-                                            <span class="absolute left-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-out peer-checked:translate-x-5"></span>
-                                        </span>
-                                    </label>
-                                    @if($temporaryBreak)
-                                        <div class="mb-3 rounded-xl border border-green-200 bg-green-50 p-3 text-left dark:border-green-900/50 dark:bg-green-900/20">
-                                            <label for="temporary-reopen-time" class="mb-1 block text-xs font-semibold text-green-900 dark:text-green-100">Loket menerima antrean kembali pada pukul</label>
-                                            <input id="temporary-reopen-time" type="time" wire:model="temporaryReopenTime"
-                                                class="w-full rounded-lg border border-green-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-green-700 dark:bg-gray-800 dark:text-white">
-                                            @error('temporaryReopenTime')
-                                                <p class="mt-1 text-xs font-medium text-red-600 dark:text-red-400">{{ $message }}</p>
+                                    <x-filament::modal
+                                        id="counter-closure-request"
+                                        width="md"
+                                        alignment="center"
+                                        icon="heroicon-o-x-circle"
+                                        icon-color="danger"
+                                        heading="Tutup Loket"
+                                        description="Pengajuan akan ditinjau admin sebelum pengambilan nomor baru dihentikan."
+                                        sticky-footer
+                                        :extra-modal-window-attribute-bag="new \Illuminate\View\ComponentAttributeBag(['style' => 'max-height: min(620px, calc(100dvh - 2rem)); overflow-y: auto; align-self: center;'])"
+                                    >
+                                        <x-slot name="trigger">
+                                            <x-filament::button color="danger" icon="heroicon-o-x-circle" class="w-full" style="width: 100%; background-color: #dc2626; color: #ffffff;">
+                                                Tutup Loket
+                                            </x-filament::button>
+                                        </x-slot>
+
+                                        <div class="space-y-5 text-left">
+                                            <div>
+                                                <label for="closure-reason" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Alasan penutupan <span class="text-danger-600">*</span></label>
+                                                <x-filament::input.wrapper>
+                                                    <textarea id="closure-reason" wire:model="closeReason" rows="4" maxlength="1000" placeholder="Contoh: istirahat siang atau gangguan sistem pusat."
+                                                        class="fi-input block w-full border-none bg-transparent px-3 py-2 text-sm text-gray-950 placeholder:text-gray-400 focus:ring-0 dark:text-white"></textarea>
+                                                </x-filament::input.wrapper>
+                                                @error('closeReason')
+                                                    <p class="mt-2 text-xs font-medium text-danger-600">{{ $message }}</p>
+                                                @enderror
+                                            </div>
+
+                                            <label @class([
+                                                'flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-900/20',
+                                                'closure-schedule-required' => $errors->has('temporaryBreak'),
+                                            ])>
+                                                    <span>
+                                                        <span class="block text-sm font-semibold text-amber-950 dark:text-amber-100">Istirahat sementara</span>
+                                                    <span class="mt-0.5 block text-xs text-amber-800 dark:text-amber-200">Wajib diaktifkan untuk menentukan rentang waktu tutup dan buka kembali hari ini.</span>
+                                                    </span>
+                                                <span class="relative inline-flex shrink-0 items-center">
+                                                    <input type="checkbox" wire:model.live="temporaryBreak" class="peer sr-only">
+                                                    <span class="h-6 w-11 rounded-full bg-gray-300 transition-colors duration-200 ease-out peer-checked:bg-green-500 dark:bg-gray-600"></span>
+                                                    <span class="absolute left-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-out peer-checked:translate-x-5"></span>
+                                                </span>
+                                            </label>
+                                            @error('temporaryBreak')
+                                                <p class="-mt-3 text-xs font-medium text-danger-600">{{ $message }}</p>
                                             @enderror
+
+                                            @if($temporaryBreak)
+                                                <div class="grid gap-4 sm:grid-cols-2">
+                                                    <div>
+                                                        <label for="temporary-close-time" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Tutup mulai</label>
+                                                        <x-filament::input.wrapper>
+                                                            <x-filament::input id="temporary-close-time" type="time" value="{{ now('Asia/Jakarta')->format('H:i') }}" disabled />
+                                                        </x-filament::input.wrapper>
+                                                        <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">Berlaku segera setelah disetujui admin.</p>
+                                                    </div>
+                                                    <div>
+                                                        <label for="temporary-reopen-time" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Buka kembali <span class="text-danger-600">*</span></label>
+                                                        <x-filament::input.wrapper>
+                                                            <x-filament::input id="temporary-reopen-time" type="time" wire:model="temporaryReopenTime" />
+                                                        </x-filament::input.wrapper>
+                                                        @error('temporaryReopenTime')
+                                                            <p class="mt-2 text-xs font-medium text-danger-600">{{ $message }}</p>
+                                                        @enderror
+                                                    </div>
+                                                </div>
+                                            @else
+                                                <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-100">
+                                                    Isi pengaturan ini terlebih dahulu: aktifkan Istirahat sementara, lalu tentukan jam buka kembali sebelum mengajukan penutupan.
+                                                </div>
+                                            @endif
                                         </div>
-                                    @else
-                                        <label class="mb-3 flex cursor-pointer items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 p-3 text-left dark:border-blue-900/50 dark:bg-blue-900/20">
-                                            <input type="checkbox" wire:model="autoReopenCounter" class="mt-0.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500">
-                                            <span class="text-xs text-blue-800 dark:text-blue-200">
-                                                <span class="block font-semibold">Buka otomatis pada hari operasional berikutnya</span>
-                                                <span>Pukul 00.05. Hilangkan centang untuk tetap tutup sampai dibuka manual.</span>
-                                            </span>
-                                        </label>
-                                    @endif
-                                    <button wire:click="requestCounterClosure"
-                                        class="w-full bg-red-500 text-white py-3 px-4 rounded-xl font-semibold hover:bg-red-600 transition-colors duration-200 shadow-lg hover:shadow-xl">
-                                        Ajukan Tutup Loket
-                                    </button>
-                                @else
+
+                                        <x-slot name="footer">
+                                            <div class="flex w-full gap-3">
+                                                <x-filament::button color="gray" class="flex-1" style="background-color: #ffffff; color: #374151; border: 1px solid #d1d5db;" x-on:click="$dispatch('close-modal', { id: 'counter-closure-request' })">
+                                                    Batal
+                                                </x-filament::button>
+                                                <x-filament::button color="danger" class="flex-1" style="background-color: #dc2626; color: #ffffff;" title="Aktifkan Istirahat sementara dan isi jam buka kembali terlebih dahulu." wire:click="requestCounterClosure" wire:loading.attr="disabled">
+                                                    Ajukan Tutup
+                                                </x-filament::button>
+                                            </div>
+                                        </x-slot>
+                                    </x-filament::modal>
+                                @elseif($approvedClosureRequest)
                                     <x-filament::modal
                                         id="reopen-counter-confirmation"
                                         width="sm"
@@ -571,6 +654,10 @@
                                             </div>
                                         </x-slot>
                                     </x-filament::modal>
+                                @else
+                                    <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
+                                        Layanan sedang ditutup untuk pengambilan nomor oleh admin. Loket ini tidak memiliki pengajuan tutup aktif yang dapat dibuka dari halaman petugas.
+                                    </div>
                                 @endif
                             </div>
                         @else
@@ -729,6 +816,7 @@
                 volume: Number(@js($ttsSettings['volume'] ?? 1.0)),
                 fallbackAudio: @js($announcementOpeningAudioUrl ?? asset('sounds/opening.mp3')),
             }
+            const CURRENT_COUNTER_ID = Number(@js($selectedCounter?->id))
 
             let tvHideTimer = null
             let cleanupAnnouncementListener = null
@@ -931,6 +1019,10 @@
                     cleanupAnnouncementListener = Livewire.on('announce-queue', async (data) => {
                         const announcementData = Array.isArray(data) ? data[0] : data
                         if (!announcementData || typeof announcementData !== 'object') return
+                        // Audio adalah milik loket pemanggil saja. Ini mencegah
+                        // event Livewire lain pada browser yang sama membunyikan
+                        // speaker loket/zona yang salah.
+                        if (Number(announcementData.counterId) !== CURRENT_COUNTER_ID) return
 
                         updateTvAnnouncement(announcementData)
                         await playAnnouncementSound(announcementData)

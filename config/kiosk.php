@@ -34,4 +34,17 @@ return [
         'BPJS Kesehatan',
         'BPJS Ketenagakerjaan',
     ],
+
+    /*
+     * Layanan tertentu beroperasi sebagai satu unit: bila salah satu loket
+     * mengajukan tutup dan disetujui, pengambilan nomor seluruh layanan ikut
+     * dihentikan. Ini sengaja berbeda dari layanan bergilir seperti
+     * Dispendukcapil, yang tetap menerima nomor selama masih ada loket lain.
+     */
+    'close_entire_service_when_any_counter_closes' => [
+        [
+            'instansi' => 'Kepolisian Resor Kota Besar (Polrestabes)',
+            'service_prefix' => '2B', // Layanan ETLE
+        ],
+    ],
 ];

@@ -146,8 +146,8 @@ class CounterClosureRequestResource extends Resource
                     ->requiresConfirmation()
                     ->modalHeading('Setujui pengajuan?')
                     ->modalDescription(fn (CounterClosureRequest $record): string => $record->scheduled_reopen_at
-                        ? 'Apakah Anda yakin ingin menyetujui penutupan loket ini? Loket akan dibuka otomatis kembali pukul '.$record->scheduled_reopen_at->timezone('Asia/Jakarta')->format('H.i').' WIB.'
-                        : 'Apakah Anda yakin ingin menyetujui penutupan loket ini?')
+                        ? 'Apakah Anda yakin ingin menyetujui penutupan loket ini? Loket akan dibuka otomatis kembali pukul '.$record->scheduled_reopen_at->timezone('Asia/Jakarta')->format('H.i').' WIB. Kiosk hanya berhenti menerima nomor bila seluruh loket aktif layanan ini juga ditutup.'
+                        : 'Apakah Anda yakin ingin menyetujui penutupan loket ini? Kiosk hanya berhenti menerima nomor bila seluruh loket aktif layanan ini juga ditutup.')
                     ->modalSubmitActionLabel('Ya, setujui')
                     ->modalCancelActionLabel('Batal')
                     ->modalWidth('sm')

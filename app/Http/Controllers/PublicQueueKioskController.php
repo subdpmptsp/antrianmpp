@@ -65,6 +65,43 @@ class PublicQueueKioskController extends Controller
         $services = $this->catalog->withDisdukcapilConsultationQueueCounts($services);
         $this->attachQueueAvailability($services, app(ServiceQueueAvailabilityService::class));
 
+        // Tahap BPJS hanya menampilkan dua pilihan. Masing-masing langsung
+        // menerbitkan tiket; BPJS Kesehatan memilih salah satu jalur 4A1/4A2
+        // yang sedang tersedia tanpa meminta pemohon memilih lagi.
+        $bpjsDirectServices = collect();
+        if ($bpjsInstansis->isNotEmpty()) {
+            $bpjsServices = Service::query()
+                ->whereIn('instansi_id', $bpjsInstansis->pluck('instansi_id'))
+                ->where('is_active', true)
+                ->where('is_archived', false)
+                ->whereHas('instansi', fn ($query) => $query
+                    ->where('is_active', true)
+                    ->where('is_archived', false)
+                    ->whereHas('counters', fn ($counter) => $counter
+                        ->where('is_active', true)
+                        ->where('is_archived', false)))
+                ->orderBy('id')
+                ->get();
+
+            $this->attachQueueAvailability($bpjsServices, app(ServiceQueueAvailabilityService::class));
+
+            $bpjsDirectServices = $bpjsInstansis->mapWithKeys(function ($institution) use ($bpjsServices) {
+                $institutionServices = $bpjsServices
+                    ->where('instansi_id', $institution->instansi_id)
+                    ->values();
+
+                $preferredServices = $institution->nama_instansi === 'BPJS Kesehatan'
+                    ? $institutionServices->filter(fn (Service $service): bool => in_array($service->prefix, ['4A1', '4A2'], true))->values()
+                    : $institutionServices;
+
+                $service = $preferredServices
+                    ->first(fn (Service $service): bool => (bool) $service->getAttribute('queue_available'))
+                    ?? $preferredServices->first();
+
+                return $service ? [$institution->instansi_id => $service] : [];
+            });
+        }
+
         // Katalog kiosk berubah saat admin mengatur layanan/loket. Jangan biarkan
         // browser memakai halaman lama karena dapat menyembunyikan instansi aktif.
         return response()->view('public.queue-kiosk', [
@@ -72,6 +109,7 @@ class PublicQueueKioskController extends Controller
             'instansis' => $instansis,
             'kioskInstitutionEntries' => $kioskInstitutionEntries,
             'bpjsInstansis' => $bpjsInstansis,
+            'bpjsDirectServices' => $bpjsDirectServices,
             'showBpjsChoices' => $showBpjsChoices,
             'services' => $services,
             'queueRequestToken' => $queueRequestToken,

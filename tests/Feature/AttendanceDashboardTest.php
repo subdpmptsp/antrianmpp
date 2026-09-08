@@ -88,6 +88,66 @@ class AttendanceDashboardTest extends TestCase
         $this->assertNull($recap['instansis']->first()['months'][9]);
     }
 
+    public function test_monthly_dashboard_builds_daily_absence_ranking_and_repeated_pattern(): void
+    {
+        $this->travelTo(Carbon::parse('2026-08-05 12:00:00'));
+        [$instansi, $operator] = $this->createOperatorForInstansi(5);
+        $operator->forceFill(['created_at' => Carbon::parse('2026-08-01 08:00:00')])->saveQuietly();
+        Attendance::create([
+            'user_id' => $operator->id,
+            'instansi_id' => $instansi->instansi_id,
+            'date' => '2026-08-03',
+            'check_in' => '08:00:00',
+            'status' => 'present',
+        ]);
+
+        $dashboard = app(AttendanceReportService::class)->monthlyDashboard(2026, 8);
+
+        $this->assertSame(1, $dashboard['days']->firstWhere('day', 3)['present']);
+        $this->assertSame(1, $dashboard['days']->firstWhere('day', 4)['absent']);
+        $this->assertSame(2, $dashboard['ranking']->first()['absent_days']);
+        $this->assertSame(2, $dashboard['repeated_absences']->first()['total']);
+    }
+
+    public function test_admin_can_render_monthly_attendance_dashboard(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        Livewire::actingAs($admin)
+            ->test(ListAttendances::class)
+            ->call('setSection', 'monthly')
+            ->assertSee('Kehadiran Petugas per Hari')
+            ->assertSee('Ketidakhadiran Tertinggi')
+            ->assertSee('Pola Tidak Hadir Berulang')
+            ->assertSee('Rekap Persentase Tahunan per Instansi')
+            ->assertSee('Ekspor Rekap Tahunan');
+    }
+
+    public function test_monthly_dashboard_can_separate_five_and_six_day_work_patterns(): void
+    {
+        $this->travelTo(Carbon::parse('2026-08-08 12:00:00')); // Saturday
+        [, $fiveDayOperator] = $this->createOperatorForInstansi(5, 'Instansi Lima Hari');
+        [$sixDayInstansi, $sixDayOperator] = $this->createOperatorForInstansi(6, 'Instansi Enam Hari');
+        $fiveDayOperator->forceFill(['created_at' => Carbon::parse('2026-08-01 08:00:00')])->saveQuietly();
+        $sixDayOperator->forceFill(['created_at' => Carbon::parse('2026-08-01 08:00:00')])->saveQuietly();
+        Attendance::create([
+            'user_id' => $sixDayOperator->id,
+            'instansi_id' => $sixDayInstansi->instansi_id,
+            'date' => '2026-08-08',
+            'check_in' => '08:00:00',
+            'status' => 'present',
+        ]);
+
+        $service = app(AttendanceReportService::class);
+        $fiveDays = $service->monthlyDashboard(2026, 8, null, null, 5);
+        $sixDays = $service->monthlyDashboard(2026, 8, null, null, 6);
+
+        $this->assertSame(0, $fiveDays['days']->firstWhere('day', 8)['present']);
+        $this->assertSame(0, $fiveDays['days']->firstWhere('day', 8)['absent']);
+        $this->assertSame(1, $sixDays['days']->firstWhere('day', 8)['present']);
+        $this->assertSame('6 hari kerja (Senin–Sabtu)', $sixDays['work_pattern_label']);
+    }
+
     public function test_admin_can_open_attendance_dashboard(): void
     {
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);

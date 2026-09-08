@@ -60,10 +60,25 @@
         .attendance-recap-cell.is-warning { color:#9a3412; background:#fff7ed; }
         .attendance-recap-cell.is-danger { color:#991b1b; background:#fef2f2; }
         .attendance-recap-cell.is-future { color:#94a3b8; background:#f8fafc; }
-        @media(max-width:1024px){.attendance-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.attendance-zones{grid-template-columns:repeat(3,minmax(0,1fr))}.attendance-controls{grid-template-columns:repeat(2,minmax(0,1fr)}}
+        .attendance-monthly-toolbar { display:grid; grid-template-columns:minmax(8rem,.7fr) minmax(7rem,.6fr) minmax(9rem,.8fr) minmax(13rem,1.3fr) minmax(11rem,1fr) auto; gap:.8rem; align-items:end; }
+        .attendance-monthly-grid { display:grid; grid-template-columns:minmax(0,2fr) minmax(18rem,1fr); gap:1rem; }
+        .attendance-chart-summary { display:flex; gap:2rem; padding:.85rem 1.2rem; border-bottom:1px solid var(--attendance-border); background:#f8fafc; }
+        .attendance-chart-summary>div { display:flex; align-items:baseline; gap:.45rem; color:#64748b; font-size:.75rem; font-weight:700; }
+        .attendance-chart-summary strong { font-size:1.15rem; font-weight:850; }
+        .attendance-chart-summary .is-present { color:#15803d; }
+        .attendance-chart-summary .is-absent { color:#b91c1c; }
+        .attendance-ranking-list { display:grid; gap:1rem; padding:1.1rem 1.2rem; }
+        .attendance-ranking-item { display:flex; align-items:center; gap:.8rem; min-width:0; }
+        .attendance-ranking-number { display:grid; place-items:center; width:1.75rem; height:1.75rem; flex:0 0 auto; border-radius:999px; color:#1d4ed8; background:#dbeafe; font-size:.75rem; font-weight:800; }
+        .attendance-ranking-name { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#0f172a; font-size:.8rem; font-weight:750; }
+        .attendance-ranking-value { flex:0 0 auto; color:#991b1b; font-size:.72rem; font-weight:800; white-space:nowrap; }
+        .attendance-ranking-track { height:.42rem; margin-top:.45rem; overflow:hidden; border-radius:999px; background:#fee2e2; }
+        .attendance-ranking-track > span { display:block; height:100%; border-radius:inherit; background:#ef4444; }
+        @media(max-width:1280px){.attendance-monthly-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}.attendance-monthly-toolbar>.fi-btn{grid-column:3}.attendance-monthly-grid{grid-template-columns:minmax(0,1.65fr) minmax(17rem,1fr)}}
+        @media(max-width:1024px){.attendance-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.attendance-zones{grid-template-columns:repeat(3,minmax(0,1fr))}.attendance-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.attendance-monthly-grid{grid-template-columns:1fr}}
         @media(max-width:640px){.attendance-tabs{width:100%;overflow-x:auto}.attendance-tab{flex:1 0 auto}.attendance-summary,.attendance-zones,.attendance-list,.attendance-controls{grid-template-columns:1fr}.attendance-person:nth-child(odd){border-right:0}}
         .dark .attendance-shell { --attendance-border:#334155; --attendance-muted:#94a3b8; }
-        .dark .attendance-tabs,.dark .attendance-table th{background:#0f172a}.dark .attendance-stat,.dark .attendance-panel,.dark .attendance-field input,.dark .attendance-field select{background:#111827}.dark .attendance-stat__value,.dark .attendance-panel__title,.dark .attendance-person__name,.dark .attendance-field input,.dark .attendance-field select{color:#f8fafc}.dark .attendance-person,.dark .attendance-table td{border-color:#1e293b}
+        .dark .attendance-tabs,.dark .attendance-table th,.dark .attendance-chart-summary{background:#0f172a}.dark .attendance-stat,.dark .attendance-panel,.dark .attendance-field input,.dark .attendance-field select{background:#111827}.dark .attendance-stat__value,.dark .attendance-panel__title,.dark .attendance-person__name,.dark .attendance-field input,.dark .attendance-field select,.dark .attendance-ranking-name{color:#f8fafc}.dark .attendance-person,.dark .attendance-table td{border-color:#1e293b}.dark .attendance-ranking-number{color:#bfdbfe;background:#1e3a8a}.dark .attendance-ranking-track{background:#451a1a}.dark .attendance-chart-summary .is-present{color:#4ade80}.dark .attendance-chart-summary .is-absent{color:#fca5a5}
     </style>
 
     <div class="attendance-shell space-y-5">

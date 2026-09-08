@@ -47,6 +47,14 @@ class ListAttendances extends Page
 
     public int $recapYear;
 
+    public int $recapMonth;
+
+    public string $recapZone = 'all';
+
+    public string $recapInstansi = '';
+
+    public string $recapWorkPattern = 'all';
+
     public function mount(): void
     {
         abort_unless(AttendanceResource::canViewAny(), 403);
@@ -56,12 +64,20 @@ class ListAttendances extends Page
         $this->historyFrom = $today->copy()->startOfMonth()->toDateString();
         $this->historyUntil = $today->toDateString();
         $this->recapYear = $today->year;
+        $this->recapMonth = $today->month;
     }
 
     public function setSection(string $section): void
     {
         if (in_array($section, ['today', 'history', 'monthly'], true)) {
             $this->activeSection = $section;
+        }
+    }
+
+    public function updatedRecapYear(int $year): void
+    {
+        if ($year === now()->year && $this->recapMonth > now()->month) {
+            $this->recapMonth = now()->month;
         }
     }
 
@@ -111,6 +127,32 @@ class ListAttendances extends Page
         );
     }
 
+    public function exportMonthlyRecap()
+    {
+        $this->validateMonthlyFilters();
+        $from = Carbon::create($this->recapYear, $this->recapMonth, 1)->startOfMonth();
+        $until = $from->copy()->endOfMonth()->min(now()->startOfDay());
+
+        if ($from->greaterThan($until)) {
+            throw ValidationException::withMessages([
+                'recapMonth' => 'Bulan yang dipilih belum berjalan.',
+            ]);
+        }
+
+        return Excel::download(
+            new AttendanceRangeExport(
+                $from->toDateString(),
+                $until->toDateString(),
+                '',
+                $this->recapInstansi !== '' ? (int) $this->recapInstansi : null,
+                'all',
+                $this->recapZone !== 'all' ? $this->recapZone : null,
+                $this->recapWorkPattern !== 'all' ? (int) $this->recapWorkPattern : null,
+            ),
+            sprintf('rekap_kehadiran_%04d_%02d.xlsx', $this->recapYear, $this->recapMonth),
+        );
+    }
+
     /** @return array<string, mixed> */
     public function getTodayOverview(): array
     {
@@ -149,7 +191,27 @@ class ListAttendances extends Page
     /** @return array<string, mixed> */
     public function getMonthlyRecap(): array
     {
+        return app(AttendanceReportService::class)->monthlyDashboard(
+            $this->recapYear,
+            $this->recapMonth,
+            $this->recapInstansi !== '' ? (int) $this->recapInstansi : null,
+            $this->recapZone !== 'all' ? $this->recapZone : null,
+            $this->recapWorkPattern !== 'all' ? (int) $this->recapWorkPattern : null,
+        );
+    }
+
+    /** @return array<string, mixed> */
+    public function getYearlyRecap(): array
+    {
         return app(AttendanceReportService::class)->monthlyRecap($this->recapYear);
+    }
+
+    /** @return array<string, string> */
+    public function getZoneOptions(): array
+    {
+        return collect(config('tv.zones', []))
+            ->mapWithKeys(fn (array $zone, int|string $id): array => [(string) $id => (string) ($zone['name'] ?? "ZONA {$id}")])
+            ->all();
     }
 
     /** @return array<int, string> */
@@ -171,5 +233,20 @@ class ListAttendances extends Page
                 'historyUntil' => "Rentang maksimal {$maximumDays} hari.",
             ]);
         }
+    }
+
+    private function validateMonthlyFilters(): void
+    {
+        $this->validate([
+            'recapYear' => ['required', 'integer', 'min:2020', 'max:'.now()->year],
+            'recapMonth' => ['required', 'integer', 'between:1,12'],
+            'recapZone' => ['required', function (string $attribute, mixed $value, \Closure $fail): void {
+                if ($value !== 'all' && ! array_key_exists((int) $value, config('tv.zones', []))) {
+                    $fail('Zona yang dipilih tidak valid.');
+                }
+            }],
+            'recapInstansi' => ['nullable', 'integer', 'exists:instansis,instansi_id'],
+            'recapWorkPattern' => ['required', 'in:all,5,6'],
+        ]);
     }
 }

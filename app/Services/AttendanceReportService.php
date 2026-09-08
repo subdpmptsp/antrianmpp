@@ -128,10 +128,18 @@ class AttendanceReportService
         string $search = '',
         ?int $instansiId = null,
         string $status = 'all',
+        ?string $zoneId = null,
+        ?int $workDaysPerWeek = null,
     ): Collection {
         $operators = $this->activeOperators()
             ->when($instansiId, fn (Collection $items) => $items->filter(
                 fn (User $user): bool => $this->resolveInstansi($user)?->instansi_id === $instansiId
+            ))
+            ->when(filled($zoneId), fn (Collection $items) => $items->filter(
+                fn (User $user): bool => (string) $this->resolveInstansi($user)?->zone_number === (string) $zoneId
+            ))
+            ->when(in_array($workDaysPerWeek, [5, 6], true), fn (Collection $items) => $items->filter(
+                fn (User $user): bool => (int) $this->resolveInstansi($user)?->work_days_per_week === $workDaysPerWeek
             ));
 
         $attendances = Attendance::query()
@@ -157,12 +165,17 @@ class AttendanceReportService
                     $instansi === null => 'unassigned',
                     default => 'absent',
                 };
+                $resolvedZoneId = $instansi?->zone_number;
 
                 $rows->push([
                     'date' => $date->toDateString(),
                     'name' => $operator->name,
                     'instansi_id' => $instansi?->instansi_id,
                     'instansi' => $instansi?->nama_instansi ?? 'Instansi belum ditentukan',
+                    'zone_id' => $resolvedZoneId !== null ? (string) $resolvedZoneId : null,
+                    'zone' => $resolvedZoneId !== null
+                        ? (string) config("tv.zones.{$resolvedZoneId}.name", $instansi?->zone ?? "ZONA {$resolvedZoneId}")
+                        : ($instansi?->zone ?? '-'),
                     'status' => $rowStatus,
                     'check_in' => $attendance?->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : null,
                 ]);
@@ -179,6 +192,171 @@ class AttendanceReportService
             })
             ->sortByDesc(fn (array $row): string => $row['date'].' '.$row['check_in'])
             ->values();
+    }
+
+    /**
+     * Data visual untuk satu bulan: kehadiran harian, pembanding bulan lalu,
+     * peringkat instansi yang tidak terwakili, dan pola absen petugas.
+     *
+     * @return array<string, mixed>
+     */
+    public function monthlyDashboard(
+        int $year,
+        int $month,
+        ?int $instansiId = null,
+        ?string $zoneId = null,
+        ?int $workDaysPerWeek = null,
+    ): array
+    {
+        $monthStart = Carbon::create($year, $month, 1)->startOfDay();
+        $monthEnd = $monthStart->copy()->endOfMonth()->startOfDay();
+        $today = now()->startOfDay();
+        $analysisEnd = $monthEnd->min($today);
+        $previousStart = $monthStart->copy()->subMonthNoOverflow()->startOfMonth();
+        $previousEnd = $previousStart->copy()->endOfMonth()->startOfDay();
+
+        $operators = $this->activeOperators()
+            ->filter(function (User $operator) use ($instansiId, $zoneId, $workDaysPerWeek): bool {
+                $instansi = $this->resolveInstansi($operator);
+
+                if (! $instansi) {
+                    return false;
+                }
+
+                if ($instansiId && (int) $instansi->instansi_id !== $instansiId) {
+                    return false;
+                }
+
+                if (in_array($workDaysPerWeek, [5, 6], true) && (int) $instansi->work_days_per_week !== $workDaysPerWeek) {
+                    return false;
+                }
+
+                return ! filled($zoneId) || (string) $instansi->zone_number === (string) $zoneId;
+            })
+            ->values();
+
+        $attendanceByOperatorAndDate = Attendance::query()
+            ->whereIn('user_id', $operators->pluck('id'))
+            ->whereBetween('date', [$previousStart->toDateString(), $monthEnd->toDateString()])
+            ->get()
+            ->keyBy(fn (Attendance $attendance): string => $attendance->user_id.'|'.$attendance->date->toDateString());
+
+        $isExpected = function (User $operator, Carbon $date): bool {
+            $instansi = $this->resolveInstansi($operator);
+
+            return $instansi !== null
+                && Carbon::parse($operator->created_at)->startOfDay()->lessThanOrEqualTo($date)
+                && $this->calendar->isWorkingDay($instansi, $date);
+        };
+        $hasAttendance = fn (User $operator, Carbon $date): bool => $attendanceByOperatorAndDate
+            ->has($operator->id.'|'.$date->toDateString());
+
+        $days = collect();
+        foreach (range(1, $monthEnd->day) as $day) {
+            $date = $monthStart->copy()->day($day);
+            $isFuture = $date->greaterThan($today);
+            $expectedOperators = $isFuture
+                ? collect()
+                : $operators->filter(fn (User $operator): bool => $isExpected($operator, $date));
+            $present = $expectedOperators->filter(fn (User $operator): bool => $hasAttendance($operator, $date))->count();
+
+            $previousDate = $day <= $previousEnd->day ? $previousStart->copy()->day($day) : null;
+            $previousPresent = $previousDate
+                ? $operators
+                    ->filter(fn (User $operator): bool => $isExpected($operator, $previousDate))
+                    ->filter(fn (User $operator): bool => $hasAttendance($operator, $previousDate))
+                    ->count()
+                : null;
+
+            $days->push([
+                'day' => $day,
+                'label' => sprintf('%02d', $day),
+                'present' => $isFuture ? null : $present,
+                'absent' => $isFuture ? null : max($expectedOperators->count() - $present, 0),
+                'previous_present' => $previousPresent,
+                'is_future' => $isFuture,
+            ]);
+        }
+
+        $ranking = $operators
+            ->groupBy(fn (User $operator): int => (int) $this->resolveInstansi($operator)->instansi_id)
+            ->map(function (Collection $institutionOperators) use ($monthStart, $analysisEnd, $isExpected, $hasAttendance): array {
+                /** @var User $firstOperator */
+                $firstOperator = $institutionOperators->first();
+                $instansi = $this->resolveInstansi($firstOperator);
+                $workingDates = $monthStart->greaterThan($analysisEnd)
+                    ? collect()
+                    : collect(CarbonPeriod::create($monthStart, $analysisEnd))
+                        ->filter(fn (Carbon $date): bool => $institutionOperators->contains(
+                            fn (User $operator): bool => $isExpected($operator, $date)
+                        ));
+                $unrepresentedDays = $workingDates->filter(fn (Carbon $date): bool => ! $institutionOperators->contains(
+                    fn (User $operator): bool => $isExpected($operator, $date) && $hasAttendance($operator, $date)
+                ))->count();
+
+                return [
+                    'instansi_id' => $instansi->instansi_id,
+                    'name' => $instansi->nama_instansi,
+                    'absent_days' => $unrepresentedDays,
+                    'working_days' => $workingDates->count(),
+                    'percentage' => $workingDates->count() > 0
+                        ? (int) round(($unrepresentedDays / $workingDates->count()) * 100)
+                        : 0,
+                ];
+            })
+            ->filter(fn (array $row): bool => $row['absent_days'] > 0)
+            ->sortByDesc('absent_days')
+            ->take(5)
+            ->values();
+
+        $repeatedAbsences = $operators
+            ->map(function (User $operator) use ($monthStart, $analysisEnd, $isExpected, $hasAttendance): array {
+                $instansi = $this->resolveInstansi($operator);
+                $absentDates = $monthStart->greaterThan($analysisEnd)
+                    ? collect()
+                    : collect(CarbonPeriod::create($monthStart, $analysisEnd))
+                        ->filter(fn (Carbon $date): bool => $isExpected($operator, $date) && ! $hasAttendance($operator, $date))
+                        ->values();
+                $weekdayPattern = $absentDates
+                    ->groupBy(fn (Carbon $date): string => $date->translatedFormat('l'))
+                    ->map->count()
+                    ->sortDesc();
+                $dominantWeekday = $weekdayPattern->keys()->first();
+                $dominantCount = (int) ($weekdayPattern->first() ?? 0);
+
+                return [
+                    'user_id' => $operator->id,
+                    'name' => $operator->name,
+                    'instansi' => $instansi?->nama_instansi ?? '-',
+                    'zone' => $instansi?->zone ?? '-',
+                    'dates' => $absentDates->map(fn (Carbon $date): string => $date->format('d'))->all(),
+                    'total' => $absentDates->count(),
+                    'pattern' => $dominantCount >= 3 ? 'Sering hari '.$dominantWeekday : 'Berulang dalam bulan',
+                ];
+            })
+            ->filter(fn (array $row): bool => $row['total'] >= 2)
+            ->sortByDesc('total')
+            ->take(10)
+            ->values();
+
+        return [
+            'year' => $year,
+            'month' => $month,
+            'month_label' => $monthStart->translatedFormat('F Y'),
+            'previous_month_label' => $previousStart->translatedFormat('F Y'),
+            'days' => $days,
+            'ranking' => $ranking,
+            'repeated_absences' => $repeatedAbsences,
+            'total_present' => $days->sum(fn (array $day): int => (int) ($day['present'] ?? 0)),
+            'total_absent' => $days->sum(fn (array $day): int => (int) ($day['absent'] ?? 0)),
+            'total_expected' => $days->sum(fn (array $day): int => (int) ($day['present'] ?? 0) + (int) ($day['absent'] ?? 0)),
+            'has_attendance_data' => $days->contains(fn (array $day): bool => (int) ($day['present'] ?? 0) > 0),
+            'work_pattern_label' => match ($workDaysPerWeek) {
+                5 => '5 hari kerja (Senin–Jumat)',
+                6 => '6 hari kerja (Senin–Sabtu)',
+                default => 'sesuai jadwal kerja masing-masing instansi',
+            },
+        ];
     }
 
     /**

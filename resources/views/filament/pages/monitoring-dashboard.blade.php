@@ -31,16 +31,287 @@
                 @endforeach
             </div>
 
+            @php
+                $chartPoints = collect($queueAnalysis['points']);
+                $peakChartLabel = $queueAnalysis['peak_label']
+                    ? str_replace(':', '.', $queueAnalysis['peak_label'])
+                    : null;
+                $cursorChartPoint = $chartPoints->get(1) ?? $chartPoints->first();
+                $cursorChartLabel = $cursorChartPoint
+                    ? str_replace(':', '.', $cursorChartPoint['label'])
+                    : '07.30';
+                $averageChartTotal = $chartPoints->isNotEmpty()
+                    ? (int) round($chartPoints->avg('total'))
+                    : 0;
+                $chartMaximum = max(
+                    100,
+                    (int) ceil(((int) $chartPoints->max('total') + 1) / 100) * 100,
+                );
+                $chartData = [
+                    'labels' => $chartPoints->pluck('label')->map(fn (string $label): string => str_replace(':', '.', $label))->all(),
+                    'datasets' => [[
+                        'label' => 'Jumlah tiket',
+                        'data' => $chartPoints->pluck('total')->all(),
+                        'borderColor' => '#2878dc',
+                        'backgroundColor' => 'rgba(40, 120, 220, 0.16)',
+                        'pointBackgroundColor' => '#2878dc',
+                        'pointBorderColor' => '#ffffff',
+                        'pointBorderWidth' => 1.5,
+                        'borderWidth' => 2,
+                        'fill' => true,
+                        'tension' => 0.15,
+                        'pointRadius' => 3,
+                        'pointHoverRadius' => 6,
+                        'order' => 2,
+                    ], ...($averageChartTotal > 0 ? [[
+                        'label' => 'Rata-rata',
+                        'data' => [
+                            ['x' => str_replace(':', '.', (string) ($chartPoints->first()['label'] ?? '07:30')), 'y' => $averageChartTotal],
+                            ['x' => str_replace(':', '.', (string) ($chartPoints->last()['label'] ?? '15:00')), 'y' => $averageChartTotal],
+                        ],
+                        'borderColor' => '#9ca3af',
+                        'backgroundColor' => '#9ca3af',
+                        'borderWidth' => 1.5,
+                        'borderDash' => [4, 5],
+                        'pointRadius' => 0,
+                        'pointHoverRadius' => 0,
+                        'fill' => false,
+                        'tension' => 0,
+                        'order' => 1,
+                        'averageMarker' => true,
+                    ]] : []), ...($peakChartLabel && $queueAnalysis['peak_total'] > 0 ? [[
+                        'label' => 'Jam puncak',
+                        'data' => [
+                            ['x' => $peakChartLabel, 'y' => 0],
+                            ['x' => $peakChartLabel, 'y' => $chartMaximum],
+                        ],
+                        'borderColor' => '#f59e0b',
+                        'backgroundColor' => '#f59e0b',
+                        'borderWidth' => 2,
+                        'borderDash' => [6, 6],
+                        'pointRadius' => 0,
+                        'pointHoverRadius' => 0,
+                        'fill' => false,
+                        'tension' => 0,
+                        'order' => 1,
+                    ]] : []), [
+                        'label' => 'Penunjuk waktu',
+                        'data' => [
+                            ['x' => $cursorChartLabel, 'y' => 0],
+                            ['x' => $cursorChartLabel, 'y' => $chartMaximum],
+                        ],
+                        'borderColor' => '#7c3aed',
+                        'backgroundColor' => '#7c3aed',
+                        'borderWidth' => 2,
+                        'pointRadius' => 0,
+                        'pointHoverRadius' => 0,
+                        'fill' => false,
+                        'tension' => 0,
+                        'order' => 0,
+                        'cursorMarker' => true,
+                    ]],
+                ];
+                $chartOptions = [
+                    'maintainAspectRatio' => false,
+                    'responsive' => true,
+                    'interaction' => [
+                        'intersect' => false,
+                        'mode' => 'index',
+                    ],
+                    'plugins' => [
+                        'legend' => ['display' => false],
+                        'tooltip' => ['enabled' => false],
+                    ],
+                    'scales' => [
+                        'x' => [
+                            'title' => ['display' => true, 'text' => 'Waktu pengambilan tiket (WIB)'],
+                        ],
+                        'y' => [
+                            'min' => 0,
+                            'max' => $chartMaximum,
+                            'beginAtZero' => true,
+                            'ticks' => ['precision' => 0, 'stepSize' => 100],
+                            'title' => ['display' => true, 'text' => 'Jumlah tiket'],
+                        ],
+                    ],
+                ];
+                $chartKey = md5(json_encode([$analysisRange, $analysisZoneFilter, $chartData]));
+            @endphp
             <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
-                <h2 class="mb-4 text-lg font-semibold text-gray-950 dark:text-white">Kepadatan Zona</h2>
-                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-                    @foreach ($zones as $zone)
-                        <button type="button" wire:click="$set('zoneFilter', '{{ $zone['id'] }}')" class="rounded-lg border p-4 text-left transition {{ (string) $zoneFilter === (string) $zone['id'] ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-100 dark:bg-primary-950/30' : ($zone['is_padat'] ? 'border-danger-300 bg-danger-50 dark:border-danger-700 dark:bg-danger-950/30' : 'border-gray-200 dark:border-gray-700') }}">
-                            <div class="flex items-center justify-between gap-3"><span class="font-semibold text-gray-950 dark:text-white">{{ $zone['name'] }}</span><span class="text-xs {{ $zone['is_padat'] ? 'text-danger-700 dark:text-danger-300' : 'text-gray-500' }}">{{ $zone['is_padat'] ? 'Padat' : 'Normal' }}</span></div>
-                            <div class="mt-3 flex gap-3 text-sm text-gray-600 dark:text-gray-300"><span>Menunggu: {{ $zone['menunggu'] }}</span><span>Dilayani: {{ $zone['dilayani'] }}</span></div>
-                        </button>
-                    @endforeach
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <div><h2 class="text-lg font-semibold text-gray-950 dark:text-white">Analisis Antrean</h2><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Pola pengambilan tiket dari pukul 07.30 hingga 15.00 WIB.</p></div>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <label class="text-sm font-medium text-gray-600 dark:text-gray-300">Periode<select wire:model.live="analysisRange" class="mt-1 block w-full rounded-lg border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900"><option value="today">Hari ini</option><option value="7">7 hari terakhir</option><option value="30">30 hari terakhir</option></select></label>
+                        <label class="text-sm font-medium text-gray-600 dark:text-gray-300">Zona<select wire:model.live="analysisZoneFilter" class="mt-1 block w-full rounded-lg border-gray-300 text-sm dark:border-gray-700 dark:bg-gray-900"><option value="all">Semua zona</option>@foreach ($zoneOptions as $id => $name)<option value="{{ $id }}">{{ $name }}</option>@endforeach</select></label>
+                    </div>
                 </div>
+                <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-lg bg-primary-50 px-4 py-3 dark:bg-primary-950/30"><p class="text-xs font-medium text-primary-700 dark:text-primary-300">Jam puncak</p><p class="mt-1 text-lg font-bold text-primary-950 dark:text-primary-100">{{ $queueAnalysis['peak_label'] ? str_replace(':', '.', $queueAnalysis['peak_label']).' WIB' : '-' }}</p></div>
+                    <div class="rounded-lg bg-gray-50 px-4 py-3 dark:bg-gray-800"><p class="text-xs font-medium text-gray-500 dark:text-gray-400">Tiket pada jam puncak</p><p class="mt-1 text-lg font-bold text-gray-950 dark:text-white">{{ $queueAnalysis['peak_total'] }}</p></div>
+                    <div class="rounded-lg bg-gray-50 px-4 py-3 dark:bg-gray-800"><p class="text-xs font-medium text-gray-500 dark:text-gray-400">Total tiket · {{ $queueAnalysis['period_label'] }}</p><p class="mt-1 text-lg font-bold text-gray-950 dark:text-white">{{ $queueAnalysis['total'] }}</p></div>
+                </div>
+                <div class="mt-5" wire:key="queue-analysis-chart-{{ $chartKey }}">
+                    <div
+                        x-load
+                        x-load-src="{{ \Filament\Support\Facades\FilamentAsset::getAlpineComponentSrc('chart', 'filament/widgets') }}"
+                        x-data="chart({
+                            cachedData: @js($chartData),
+                            options: @js($chartOptions),
+                            type: 'line',
+                        })"
+                        x-init="
+                            const canvas = $refs.canvas;
+                            let isDraggingCursor = false;
+                            let selectedCursorIndex = 1;
+                            const peakLabel = @js($peakChartLabel);
+                            const peakTotal = Number(@js($queueAnalysis['peak_total']));
+                            const averageTotal = Number(@js($averageChartTotal));
+
+                            const positionLabel = (element, x, y, placeBelow = false) => {
+                                const activeChart = getChart();
+                                if (! activeChart || ! element) return;
+
+                                element.style.display = 'block';
+                                const width = element.offsetWidth;
+                                const height = element.offsetHeight;
+                                const left = Math.max(
+                                    activeChart.chartArea.left,
+                                    Math.min(x - (width / 2), activeChart.chartArea.right - width),
+                                );
+                                let top = placeBelow ? y + 10 : y - height - 10;
+
+                                if (top < activeChart.chartArea.top) top = y + 10;
+                                if (top + height > activeChart.chartArea.bottom) top = y - height - 10;
+
+                                element.style.left = `${left}px`;
+                                element.style.top = `${top}px`;
+                            };
+
+                            const positionReferenceLabels = () => {
+                                const activeChart = getChart();
+                                if (! activeChart) return;
+
+                                if (peakLabel && peakTotal > 0) {
+                                    const peakIndex = activeChart.data.labels.indexOf(peakLabel);
+                                    if (peakIndex >= 0 && selectedCursorIndex !== peakIndex) {
+                                        $refs.peakInfo.textContent = `Jam puncak · ${peakLabel} WIB · ${peakTotal} tiket`;
+                                        positionLabel(
+                                            $refs.peakInfo,
+                                            activeChart.scales.x.getPixelForValue(peakIndex),
+                                            activeChart.scales.y.getPixelForValue(peakTotal),
+                                        );
+                                    } else {
+                                        $refs.peakInfo.style.display = 'none';
+                                    }
+                                }
+
+                                if (averageTotal > 0) {
+                                    $refs.averageInfo.textContent = `Rata-rata ${averageTotal} tiket`;
+                                    $refs.averageInfo.style.display = 'block';
+                                    const averageWidth = $refs.averageInfo.offsetWidth;
+                                    $refs.averageInfo.style.left = `${Math.max(activeChart.chartArea.left, activeChart.chartArea.right - averageWidth)}px`;
+                                    $refs.averageInfo.style.top = `${Math.max(activeChart.chartArea.top, activeChart.scales.y.getPixelForValue(averageTotal) - $refs.averageInfo.offsetHeight - 4)}px`;
+                                }
+                            };
+
+                            const selectCursorIndex = (selectedIndex) => {
+                                const activeChart = getChart();
+                                if (! activeChart) return;
+
+                                const labels = activeChart.data.labels;
+                                selectedCursorIndex = Math.max(0, Math.min(labels.length - 1, selectedIndex));
+                                const selectedLabel = labels[selectedCursorIndex];
+                                const selectedTotal = Number(activeChart.data.datasets[0].data[selectedCursorIndex] ?? 0);
+                                const cursorDataset = activeChart.data.datasets.find((dataset) => dataset.cursorMarker === true);
+                                const peakIndex = peakLabel ? labels.indexOf(peakLabel) : -1;
+                                const overlapsPeak = selectedCursorIndex === peakIndex;
+
+                                if (! cursorDataset) return;
+
+                                cursorDataset.hidden = overlapsPeak;
+                                cursorDataset.data = [
+                                    { x: selectedLabel, y: 0 },
+                                    { x: selectedLabel, y: activeChart.scales.y.max },
+                                ];
+                                $refs.cursorInfo.textContent = overlapsPeak
+                                    ? `Jam puncak · ${selectedLabel} WIB · ${selectedTotal} tiket`
+                                    : `${selectedLabel} WIB · ${selectedTotal} tiket`;
+                                $refs.cursorInfo.style.color = overlapsPeak ? '#92400e' : '#6d28d9';
+                                $refs.cursorInfo.style.borderColor = overlapsPeak ? '#f59e0b' : '#8b5cf6';
+                                $refs.cursorInfo.style.backgroundColor = overlapsPeak ? '#fffbeb' : '#f5f3ff';
+
+                                activeChart.update('none');
+                                requestAnimationFrame(() => {
+                                    const cursorX = activeChart.scales.x.getPixelForValue(selectedCursorIndex);
+                                    const cursorY = activeChart.scales.y.getPixelForValue(selectedTotal);
+                                    const isNearPeak = peakIndex >= 0 && Math.abs(selectedCursorIndex - peakIndex) <= 1;
+                                    positionLabel($refs.cursorInfo, cursorX, cursorY, isNearPeak && ! overlapsPeak);
+                                    positionReferenceLabels();
+                                });
+                            };
+
+                            const moveCursor = (event) => {
+                                const activeChart = getChart();
+
+                                if (! activeChart) return;
+
+                                const labels = activeChart.data.labels;
+                                const canvasRect = canvas.getBoundingClientRect();
+                                const pointerX = event.clientX - canvasRect.left;
+                                const rawIndex = activeChart.scales.x.getValueForPixel(pointerX);
+                                const selectedIndex = Math.max(0, Math.min(labels.length - 1, Math.round(rawIndex)));
+                                selectCursorIndex(selectedIndex);
+                            };
+
+                            canvas.addEventListener('pointerdown', (event) => {
+                                isDraggingCursor = true;
+                                canvas.setPointerCapture(event.pointerId);
+                                moveCursor(event);
+                            });
+                            canvas.addEventListener('pointermove', (event) => {
+                                if (isDraggingCursor) moveCursor(event);
+                            });
+                            canvas.addEventListener('pointerup', (event) => {
+                                isDraggingCursor = false;
+                                canvas.releasePointerCapture(event.pointerId);
+                            });
+                            canvas.addEventListener('pointercancel', () => isDraggingCursor = false);
+                            const initializeReferenceLabels = (attempt = 0) => {
+                                const activeChart = getChart();
+                                if (! activeChart || ! activeChart.chartArea) {
+                                    if (attempt < 20) requestAnimationFrame(() => initializeReferenceLabels(attempt + 1));
+                                    return;
+                                }
+
+                                selectCursorIndex(Math.min(1, activeChart.data.labels.length - 1));
+                            };
+                            requestAnimationFrame(() => initializeReferenceLabels());
+                            const chartResizeObserver = new ResizeObserver(() => {
+                                requestAnimationFrame(() => selectCursorIndex(selectedCursorIndex));
+                            });
+                            chartResizeObserver.observe($refs.chartWrapper);
+                        "
+                        wire:ignore
+                        class="fi-color-primary"
+                    >
+                        <div x-ref="chartWrapper" style="position: relative; height: 320px;">
+                            <canvas x-ref="canvas" style="touch-action: pan-y;" role="img" aria-label="Grafik jumlah tiket per interval tiga puluh menit dengan penunjuk waktu yang dapat digeser"></canvas>
+                            <span x-ref="cursorInfo" style="display: none; position: absolute; z-index: 3; pointer-events: none; white-space: nowrap; border: 1px solid #8b5cf6; border-radius: 0.5rem; padding: 0.25rem 0.55rem; background: #f5f3ff; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12); font-size: 0.75rem; line-height: 1.25rem; font-weight: 700; color: #6d28d9;"></span>
+                            <span x-ref="peakInfo" style="display: none; position: absolute; z-index: 2; pointer-events: none; white-space: nowrap; border: 1px solid #f59e0b; border-radius: 0.5rem; padding: 0.25rem 0.55rem; background: #fffbeb; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1); font-size: 0.75rem; line-height: 1.25rem; font-weight: 700; color: #92400e;"></span>
+                            <span x-ref="averageInfo" style="display: none; position: absolute; z-index: 1; pointer-events: none; white-space: nowrap; padding: 0.1rem 0.35rem; background: rgba(255, 255, 255, 0.9); font-size: 0.68rem; line-height: 1rem; font-weight: 600; color: #6b7280;"></span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 1rem; margin-top: 0.5rem; font-size: 0.75rem; line-height: 1.25rem; color: #6b7280;">
+                            <span><span style="display: inline-block; width: 1rem; height: 2px; margin-right: 0.25rem; vertical-align: middle; background: #f59e0b;"></span>Oranye: jam puncak otomatis</span>
+                            <span><span style="display: inline-block; width: 1rem; height: 2px; margin-right: 0.25rem; vertical-align: middle; background: #7c3aed;"></span>Ungu: geser untuk melihat waktu</span>
+                            <span><span style="display: inline-block; width: 1rem; height: 0; margin-right: 0.25rem; vertical-align: middle; border-top: 1px dashed #9ca3af;"></span>Abu-abu: rata-rata per interval</span>
+                        </div>
+                        <span x-ref="backgroundColorElement" class="text-primary-50 dark:text-primary-400/10"></span>
+                        <span x-ref="borderColorElement" class="text-primary-600 dark:text-primary-400"></span>
+                        <span x-ref="gridColorElement" class="text-gray-200 dark:text-gray-800"></span>
+                        <span x-ref="textColorElement" class="text-gray-500 dark:text-gray-400"></span>
+                    </div>
+                </div>
+                <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">Hanya menghitung tiket yang berhasil diterbitkan; tiket batal dan proses cetak yang belum selesai tidak termasuk.</p>
             </div>
 
             <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">

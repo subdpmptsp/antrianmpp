@@ -7,6 +7,7 @@
         : null;
     $kioskInstitutionEntries = collect($kioskInstitutionEntries ?? []);
     $bpjsInstansis = collect($bpjsInstansis ?? []);
+    $bpjsDirectServices = collect($bpjsDirectServices ?? []);
     $showBpjsChoices = (bool) ($showBpjsChoices ?? false);
 @endphp
 
@@ -60,7 +61,33 @@
                     </div>
                     <div class="queue-kiosk__institution-grid queue-kiosk__institution-grid--bpjs">
                         @forelse ($bpjsInstansis as $instansi)
-                            @include('kiosk.partials.institution-card', ['instansi' => $instansi, 'variant' => 'catalog', 'isLivewire' => $isLivewire])
+                            @php
+                                $directService = $bpjsDirectServices->get($instansi->instansi_id);
+                                $isDirectServiceAvailable = (bool) $directService?->getAttribute('queue_available');
+                            @endphp
+                            @if (! $isLivewire && $directService)
+                                <form id="kiosk-bpjs-service-{{ $directService->id }}" method="POST" action="{{ route('public.queue-kiosk.select-service', ['serviceId' => $directService->id]) }}" class="queue-kiosk__service-form">
+                                    @csrf
+                                    <input type="hidden" name="queue_request_token" value="{{ $queueRequestToken }}">
+                                    <input type="hidden" name="instansi_id" value="{{ $instansi->instansi_id }}">
+                                </form>
+                                <button
+                                    type="button"
+                                    class="queue-kiosk__institution-card queue-kiosk__institution-card--catalog {{ $isDirectServiceAvailable ? '' : 'is-unavailable' }}"
+                                    data-kiosk-service
+                                    data-form-id="kiosk-bpjs-service-{{ $directService->id }}"
+                                    @disabled(! $isDirectServiceAvailable)
+                                >
+                                    @if ($instansi->logo_path)
+                                        <span class="queue-kiosk__institution-logo has-image"><img src="{{ Storage::disk('public')->url($instansi->logo_path) }}" alt="Logo {{ $instansi->nama_instansi }}" loading="eager" decoding="async"></span>
+                                    @else
+                                        <span class="queue-kiosk__institution-logo is-fallback"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21h16M6 21V8l6-4 6 4v13M9 10h.01M12 10h.01M15 10h.01M9 14h.01M12 14h.01M15 14h.01M10 21v-3h4v3"/></svg></span>
+                                    @endif
+                                    <span class="queue-kiosk__institution-copy"><strong>{{ $instansi->nama_instansi }}</strong><small>{{ $isDirectServiceAvailable ? 'Sentuh untuk cetak tiket' : $directService->getAttribute('queue_unavailable_message') }}</small></span>
+                                </button>
+                            @else
+                                @include('kiosk.partials.institution-card', ['instansi' => $instansi, 'variant' => 'catalog', 'isLivewire' => $isLivewire])
+                            @endif
                         @empty
                             <div class="queue-kiosk__empty"><h3>Layanan BPJS belum tersedia</h3><p>Silakan hubungi petugas layanan.</p></div>
                         @endforelse
@@ -85,7 +112,7 @@
                                 @else
                                     <a class="queue-kiosk__institution-card queue-kiosk__institution-card--catalog" data-kiosk-navigation href="{{ route('public.queue-kiosk', ['bpjs' => 1]) }}">
                                 @endif
-                                        <span class="queue-kiosk__institution-logo is-fallback"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 4v12m-6-6h12"/></svg></span>
+                                        <span class="queue-kiosk__institution-logo is-fallback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 0 0 2.25-2.25V6a2.25 2.25 0 0 0-2.25-2.25H6A2.25 2.25 0 0 0 3.75 6v2.25A2.25 2.25 0 0 0 6 10.5Zm0 9.75h2.25A2.25 2.25 0 0 0 10.5 18v-2.25a2.25 2.25 0 0 0-2.25-2.25H6a2.25 2.25 0 0 0-2.25 2.25V18A2.25 2.25 0 0 0 6 20.25Zm9.75-9.75H18a2.25 2.25 0 0 0 2.25-2.25V6A2.25 2.25 0 0 0 18 3.75h-2.25A2.25 2.25 0 0 0 13.5 6v2.25a2.25 2.25 0 0 0 2.25 2.25Z"/></svg></span>
                                         <span class="queue-kiosk__institution-copy"><strong>BPJS</strong><small>Pilih jenis layanan</small></span>
                                 @if ($isLivewire)</button>@else</a>@endif
                             @else

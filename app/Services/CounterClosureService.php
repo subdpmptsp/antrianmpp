@@ -56,7 +56,10 @@ class CounterClosureService
                 'service_id' => $counter->service_id,
                 'requested_by_user_id' => $user->id,
                 'reason' => $reason,
-                'auto_reopen' => $scheduledReopenAt ? false : $autoReopen,
+                // Seluruh pengajuan tutup loket bersifat sementara. Tidak ada
+                // penutupan dari pengajuan petugas yang boleh terbawa ke hari
+                // operasional berikutnya hanya karena lupa dibuka kembali.
+                'auto_reopen' => true,
                 'scheduled_reopen_at' => $scheduledReopenAt,
                 // Fitur jeda seluruh layanan belum diaktifkan pada operasional.
                 'closes_service_queues' => false,
@@ -104,7 +107,9 @@ class CounterClosureService
                 $this->pauseServiceQueues($request->service_id, $request->scheduled_reopen_at, $request->reason);
             }
 
-            $this->syncServiceQueueAvailability($request->service_id);
+            $this->syncCounterQueueAvailability(
+                Counter::withoutGlobalScopes()->findOrFail($request->counter_id),
+            );
         });
 
         app(MasterDataCache::class)->invalidate();
@@ -173,7 +178,9 @@ class CounterClosureService
                 'reopened_at' => now(),
             ]);
 
-            $this->syncServiceQueueAvailability($counter->service_id);
+            $this->syncCounterQueueAvailability(
+                Counter::withoutGlobalScopes()->findOrFail($counter->id),
+            );
         });
 
         app(MasterDataCache::class)->invalidate();
@@ -187,11 +194,14 @@ class CounterClosureService
     {
         $reopened = DB::transaction(function () use ($closureRequest): bool {
             $request = CounterClosureRequest::query()->lockForUpdate()->findOrFail($closureRequest->id);
+            $today = now('Asia/Jakarta')->startOfDay();
 
             $scheduledReopenDue = $request->scheduled_reopen_at
                 && $request->scheduled_reopen_at->lessThanOrEqualTo(now('Asia/Jakarta'));
+            $approvedOnPreviousDay = $request->reviewed_at
+                && $request->reviewed_at->copy()->setTimezone('Asia/Jakarta')->lessThan($today);
 
-            if ($request->status !== CounterClosureRequest::STATUS_APPROVED || (! $request->auto_reopen && ! $scheduledReopenDue)) {
+            if ($request->status !== CounterClosureRequest::STATUS_APPROVED || (! $scheduledReopenDue && ! $approvedOnPreviousDay)) {
                 return false;
             }
 
@@ -203,7 +213,7 @@ class CounterClosureService
                 'reopened_at' => now(),
             ]);
 
-            $this->syncServiceQueueAvailability($counter->service_id);
+            $this->syncCounterQueueAvailability($counter);
 
             return true;
         });
@@ -213,6 +223,48 @@ class CounterClosureService
         }
 
         return $reopened;
+    }
+
+    /**
+     * Pengaman ketika scheduler tengah malam tidak berjalan, misalnya karena
+     * server dimatikan. Dipanggil saat kiosk memeriksa layanan agar penutupan
+     * sementara hari sebelumnya langsung dipulihkan pada akses pertama.
+     */
+    public function recoverOverdueClosuresForService(int $serviceId): int
+    {
+        $now = now('Asia/Jakarta');
+        $today = $now->copy()->startOfDay();
+        $calendar = app(WorkingCalendarService::class);
+        $requests = CounterClosureRequest::query()
+            ->with('counter.instansi')
+            ->where('service_id', $serviceId)
+            ->where('status', CounterClosureRequest::STATUS_APPROVED)
+            ->where(function ($query) use ($today, $now): void {
+                $query->where('reviewed_at', '<', $today)
+                    ->orWhere(function ($scheduled) use ($now): void {
+                        $scheduled->whereNotNull('scheduled_reopen_at')
+                            ->where('scheduled_reopen_at', '<=', $now);
+                    });
+            })
+            ->orderBy('reviewed_at')
+            ->get();
+
+        $recovered = 0;
+
+        foreach ($requests as $request) {
+            $counter = $request->counter;
+            $isTimedReopen = $request->scheduled_reopen_at !== null;
+
+            if (! $counter?->instansi || (! $isTimedReopen && ! $calendar->isWorkingDay($counter->instansi, $today))) {
+                continue;
+            }
+
+            if ($this->reopenAutomatically($request)) {
+                $recovered++;
+            }
+        }
+
+        return $recovered;
     }
 
     /** Hapus penutupan layanan sementara yang waktunya sudah berakhir. */
@@ -273,21 +325,52 @@ class CounterClosureService
      * telah disetujui tutup. Loket yang sedang menangani antrean tetap dapat
      * memanggil dan menyelesaikan antrean yang sudah masuk.
      */
-    private function syncServiceQueueAvailability(int $serviceId): void
+    /**
+     * Satu loket dapat menangani layanan utama maupun layanan bantuan.
+     * Saat loket ditutup/dibuka, seluruh layanan yang dapat ditanganinya
+     * harus disinkronkan agar status kiosk tidak tertinggal.
+     */
+    private function syncCounterQueueAvailability(Counter $counter): void
     {
-        $openCounterExists = Counter::withoutGlobalScopes()
-            ->where('service_id', $serviceId)
+        $counter->callableServiceIds()
+            ->each(fn (int $serviceId) => $this->synchronizeServiceQueueAvailability($serviceId));
+    }
+
+    /**
+     * Sinkronkan status penerbitan tiket berdasarkan penutupan loket. Sebagian
+     * besar layanan tetap menerima nomor selama ada loket lain yang aktif.
+     * ETLE adalah pengecualian operasional: satu persetujuan tutup menghentikan
+     * seluruh pengambilan nomor ETLE sampai loket tersebut dibuka kembali.
+     */
+    public function synchronizeServiceQueueAvailability(int $serviceId): void
+    {
+        $service = Service::query()->with('instansi')->findOrFail($serviceId);
+        $closeEntireService = collect(config('kiosk.close_entire_service_when_any_counter_closes', []))
+            ->contains(function (array $rule) use ($service): bool {
+                return ($rule['service_prefix'] ?? null) === $service->prefix
+                    && ($rule['instansi'] ?? null) === $service->instansi?->nama_instansi;
+            });
+
+        $counterQuery = Counter::withoutGlobalScopes()
             ->where('is_active', true)
             ->where('is_archived', false)
-            ->whereDoesntHave('closureRequests', function ($query): void {
+            ->where(function ($query) use ($serviceId): void {
+                $query->where('service_id', $serviceId)
+                    ->orWhereHas('additionalServices', fn ($additional) => $additional->whereKey($serviceId));
+            });
+
+        $isAcceptingQueues = $closeEntireService
+            ? ! (clone $counterQuery)->whereHas('closureRequests', function ($query): void {
                 $query->where('status', CounterClosureRequest::STATUS_APPROVED);
-            })
-            ->exists();
+            })->exists()
+            : (clone $counterQuery)->whereDoesntHave('closureRequests', function ($query): void {
+                $query->where('status', CounterClosureRequest::STATUS_APPROVED);
+            })->exists();
 
         DB::table('services')
             ->where('id', $serviceId)
             ->update([
-                'is_accepting_queues' => $openCounterExists,
+                'is_accepting_queues' => $isAcceptingQueues,
                 'updated_at' => now(),
             ]);
     }

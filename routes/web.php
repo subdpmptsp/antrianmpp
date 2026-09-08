@@ -8,6 +8,7 @@ use App\Filament\Pages\QueueStatus;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AudioController;
 use App\Http\Controllers\BarcodeController;
+use App\Http\Controllers\DashboardMppController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\EventQueuePublicController;
 use App\Http\Controllers\PublicQueueKioskController;
@@ -24,6 +25,12 @@ use Illuminate\Support\Facades\Route;
 use Maatwebsite\Excel\Facades\Excel;
 
 Route::get('queue-status', QueueStatus::class)->name('queue.status');
+
+// Etalase data publik MPP SIOLA untuk layar TV 16:9.
+Route::get('/dashboard-mpp', [DashboardMppController::class, 'index'])
+    ->name('showcase.siola-data');
+Route::get('/api/dashboard-mpp', [DashboardMppController::class, 'data'])
+    ->name('api.showcase.siola-data');
 
 // Antrean Event berdiri sendiri dari antrean reguler: data, tiket, QR, dan TV-nya
 // hanya menggunakan tabel event_queue_* dan tidak pernah memanggil layanan Queue.

@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Exports\RekapLayananExport;
 use App\Models\Counter;
+use App\Models\Queue;
 use App\Services\MonitoringRealtimeService;
 use Carbon\Carbon;
 use Filament\Forms;
@@ -12,6 +13,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 
 class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
@@ -26,6 +28,8 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
 
     public string $activeTab = 'realtime';
     public ?string $zoneFilter = null;
+    public string $analysisRange = '30';
+    public string $analysisZoneFilter = 'all';
     public ?string $reportZoneFilter = null;
     public ?string $search = null;
     public ?string $from = null;
@@ -153,10 +157,69 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
 
         return [
             'summary' => $isRealtime ? $monitoring->getSummary() : null,
-            'zones' => $isRealtime ? $monitoring->getZones() : collect(),
             'services' => $isRealtime && filled($this->zoneFilter) ? $monitoring->getServices($this->zoneFilter, $this->search) : collect(),
             'zoneOptions' => $monitoring->getZoneOptions(),
+            'queueAnalysis' => $isRealtime ? $this->getQueueAnalysis() : null,
             'rekapan' => $isReport && filled($this->reportZoneFilter) ? $this->getRekapJumlahPemohon() : collect(),
+        ];
+    }
+
+    /**
+     * Ringkas pola kedatangan pemohon dalam interval 30 menit. Tiket yang
+     * masih tahap cetak atau telah batal tidak dihitung karena belum menjadi
+     * nomor antrean yang benar-benar diterbitkan.
+     *
+     * @return array{points: array<int, array{label: string, total: int}>, total: int, peak_label: ?string, peak_total: int, period_label: string}
+     */
+    protected function getQueueAnalysis(): array
+    {
+        $now = now('Asia/Jakarta');
+        [$from, $to, $periodLabel] = match ($this->analysisRange) {
+            'today' => [$now->copy()->startOfDay(), $now->copy()->endOfDay(), 'Hari ini'],
+            '7' => [$now->copy()->subDays(6)->startOfDay(), $now->copy()->endOfDay(), '7 hari terakhir'],
+            default => [$now->copy()->subDays(29)->startOfDay(), $now->copy()->endOfDay(), '30 hari terakhir'],
+        };
+
+        $start = $now->copy()->setTime(7, 30);
+        $end = $now->copy()->setTime(15, 0);
+        $slots = collect();
+
+        for ($slot = $start->copy(); $slot->lessThanOrEqualTo($end); $slot->addMinutes(30)) {
+            $slots->put($slot->format('H:i'), 0);
+        }
+
+        $zoneName = $this->analysisZoneFilter !== 'all'
+            ? (string) config("tv.zones.{$this->analysisZoneFilter}.name", "ZONA {$this->analysisZoneFilter}")
+            : null;
+
+        $counts = DB::table('queues as q')
+            ->join('services as s', 's.id', '=', 'q.service_id')
+            ->join('instansis as i', 'i.instansi_id', '=', 's.instansi_id')
+            ->whereBetween('q.created_at', [$from, $to])
+            ->whereNotIn('q.status', [Queue::STATUS_PRINTING, Queue::STATUS_CANCELED])
+            ->when($zoneName, fn ($query) => $query->where('i.zone', $zoneName))
+            ->whereRaw("TIME(q.created_at) >= '07:30:00'")
+            ->whereRaw("TIME(q.created_at) <= '15:00:00'")
+            ->selectRaw('HOUR(q.created_at) as hour_slot, FLOOR(MINUTE(q.created_at) / 30) as half_hour, COUNT(*) as total')
+            ->groupBy('hour_slot', 'half_hour')
+            ->get();
+
+        foreach ($counts as $count) {
+            $label = sprintf('%02d:%02d', (int) $count->hour_slot, (int) $count->half_hour * 30);
+            if ($slots->has($label)) {
+                $slots->put($label, (int) $count->total);
+            }
+        }
+
+        $peakTotal = (int) $slots->max();
+        $peakLabel = $peakTotal > 0 ? (string) $slots->search($peakTotal, true) : null;
+
+        return [
+            'points' => $slots->map(fn (int $total, string $label): array => ['label' => $label, 'total' => $total])->values()->all(),
+            'total' => (int) $slots->sum(),
+            'peak_label' => $peakLabel,
+            'peak_total' => $peakTotal,
+            'period_label' => $periodLabel,
         ];
     }
 

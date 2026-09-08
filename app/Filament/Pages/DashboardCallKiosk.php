@@ -12,12 +12,18 @@ use App\Services\QueueService;
 use Carbon\Carbon;
 use Filament\Pages\Page;
 use Illuminate\Contracts\View\View; // Penting untuk method render
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Livewire\WithPagination;
 
 class DashboardCallKiosk extends Page
 {
+    use WithPagination;
+
+    private const WAITING_QUEUES_PER_PAGE = 5;
+
     // --- Konfigurasi Halaman Filament ---
     // protected static ?string $navigationIcon = 'heroicon-o-speakerphone';
     protected static string $view = 'filament.pages.dashboard-call-kiosk';
@@ -50,7 +56,6 @@ class DashboardCallKiosk extends Page
     public ?int $selectedServiceId = null;
     public ?string $selectedZone = null;
     public ?string $closeReason = null;
-    public bool $autoReopenCounter = true;
     public bool $temporaryBreak = false;
     public ?string $temporaryReopenTime = null;
 
@@ -305,6 +310,7 @@ class DashboardCallKiosk extends Page
             $this->selectedCounterId = $targetCounter->id;
             $this->selectedServiceId = $targetCounter->service_id;
             $this->selectedZone = $targetCounter->name;
+            $this->resetPage('waitingQueuePage');
 
             Log::info('Operator changed active work counter within service team', [
                 'user_id' => $user->id,
@@ -328,6 +334,7 @@ class DashboardCallKiosk extends Page
 
         $counter = $query->find($counterId);
         $this->selectedServiceId = $counter?->service_id;
+        $this->resetPage('waitingQueuePage');
         Log::debug('Counter selected', [
             'counter_id' => $counterId,
             'counter_name' => $counter?->display_name,
@@ -374,6 +381,7 @@ class DashboardCallKiosk extends Page
         if ($firstVisibleCounter) {
             $this->selectedCounterId = $firstVisibleCounter->id;
             $this->selectedServiceId = $firstVisibleCounter->service_id;
+            $this->resetPage('waitingQueuePage');
         }
     }
 
@@ -403,6 +411,7 @@ class DashboardCallKiosk extends Page
         }
 
         $this->selectedServiceId = $serviceId;
+        $this->resetPage('waitingQueuePage');
     }
 
     public function callNext(QueueService $queueService)
@@ -525,6 +534,7 @@ class DashboardCallKiosk extends Page
                 'queueNumber' => $nextQueue->number,
                 'serviceName' => $serviceName,
                 'servicePrefix' => $servicePrefix,
+                'counterId' => $this->selectedCounter->id,
                 'counterName' => $this->selectedCounter->display_name,
                 // Uji coba pengumuman khusus Bursa Tenaga Kerja di loket 4k1.
                 // Loket lain tetap menggunakan format pengumuman layanan yang ada.
@@ -591,6 +601,7 @@ class DashboardCallKiosk extends Page
             'queueNumber' => $queue->number,
             'serviceName' => $serviceName,
             'servicePrefix' => $servicePrefix,
+            'counterId' => $this->selectedCounter->id,
             'counterName' => $this->selectedCounter->display_name,
             // Panggilan ulang harus memakai format yang identik dengan panggilan pertama.
             'institutionName' => $this->selectedCounter->instansi?->nama_instansi,
@@ -677,14 +688,23 @@ class DashboardCallKiosk extends Page
 
         $this->resetErrorBag('closeReason');
 
-        if ($this->temporaryBreak) {
-            $this->validate([
-                'temporaryReopenTime' => ['required', 'date_format:H:i'],
-            ], [
-                'temporaryReopenTime.required' => 'Jam loket aktif kembali wajib diisi.',
-                'temporaryReopenTime.date_format' => 'Format jam aktif kembali tidak valid.',
+        if (! $this->temporaryBreak) {
+            $message = 'Aktifkan Istirahat sementara dan tentukan jam buka kembali sebelum mengajukan penutupan.';
+            $this->addError('temporaryBreak', $message);
+            $this->dispatch('notify', [
+                'type' => 'warning',
+                'message' => $message,
             ]);
+
+            return;
         }
+
+        $this->validate([
+            'temporaryReopenTime' => ['required', 'date_format:H:i'],
+        ], [
+            'temporaryReopenTime.required' => 'Jam loket aktif kembali wajib diisi.',
+            'temporaryReopenTime.date_format' => 'Format jam aktif kembali tidak valid.',
+        ]);
 
         $scheduledReopenAt = $this->temporaryBreak
             ? Carbon::createFromFormat(
@@ -699,13 +719,13 @@ class DashboardCallKiosk extends Page
                 $this->selectedCounter,
                 Auth::user(),
                 (string) $this->closeReason,
-                $this->autoReopenCounter,
+                true,
                 $scheduledReopenAt,
             );
             $this->closeReason = null;
-            $this->autoReopenCounter = true;
             $this->temporaryBreak = false;
             $this->temporaryReopenTime = null;
+            $this->dispatch('close-modal', id: 'counter-closure-request');
             $this->dispatch('notify', [
                 'type' => 'success',
                 'message' => 'Permintaan tutup loket sudah dikirim dan menunggu persetujuan admin.',
@@ -720,8 +740,12 @@ class DashboardCallKiosk extends Page
 
     public function updatedTemporaryBreak(bool $temporaryBreak): void
     {
-        if ($temporaryBreak && blank($this->temporaryReopenTime)) {
-            $this->temporaryReopenTime = now('Asia/Jakarta')->addHour()->startOfHour()->format('H:i');
+        if ($temporaryBreak) {
+            $this->resetErrorBag('temporaryBreak');
+
+            if (blank($this->temporaryReopenTime)) {
+                $this->temporaryReopenTime = now('Asia/Jakarta')->addHour()->startOfHour()->format('H:i');
+            }
         }
 
     }
@@ -749,7 +773,13 @@ class DashboardCallKiosk extends Page
     public function getViewData(): array
     {
         $currentQueue = null;
-        $waitingQueues = collect(); // Default ke koleksi kosong
+        $waitingQueues = new LengthAwarePaginator(
+            items: [],
+            total: 0,
+            perPage: self::WAITING_QUEUES_PER_PAGE,
+            currentPage: 1,
+            options: ['pageName' => 'waitingQueuePage'],
+        );
         $stats = [
             'total' => 0, 'finished' => 0, 'waiting' => 0, 'cancelled' => 0,
         ];
@@ -855,7 +885,7 @@ class DashboardCallKiosk extends Page
                     ->whereNull('called_at')
                     ->whereDate('created_at', now()->format('Y-m-d'))
                     ->orderBy('created_at', 'asc')
-                    ->get();
+                    ->paginate(self::WAITING_QUEUES_PER_PAGE, ['*'], 'waitingQueuePage');
 
                 $baseQuery = Queue::where('counter_id', $counter->id)
                     ->whereDate('created_at', now()->format('Y-m-d'));
@@ -865,14 +895,14 @@ class DashboardCallKiosk extends Page
                     ->whereNull('called_at')
                     ->whereDate('created_at', now()->format('Y-m-d'))
                     ->orderBy('created_at', 'asc')
-                    ->get();
+                    ->paginate(self::WAITING_QUEUES_PER_PAGE, ['*'], 'waitingQueuePage');
 
                 $baseQuery = Queue::whereIn('service_id', $serviceIds)
                     ->whereDate('created_at', now()->format('Y-m-d'));
             }
             $stats['total'] = (clone $baseQuery)->count();
             $stats['finished'] = (clone $baseQuery)->where('status', 'finished')->count();
-            $stats['waiting'] = $waitingQueues->count();
+            $stats['waiting'] = $waitingQueues->total();
             $stats['cancelled'] = (clone $baseQuery)->where('status', 'canceled')->count();
         }
 

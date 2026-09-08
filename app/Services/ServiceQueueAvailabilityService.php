@@ -13,10 +13,34 @@ use Carbon\Carbon;
 
 class ServiceQueueAvailabilityService
 {
+    /** @var array<int, true> */
+    private array $recoveredServiceIds = [];
+
+    private bool $hasClearedExpiredPauses = false;
+
     /** @return array{available: bool, message: string, code: string} */
     public function evaluate(Service $service, ?Carbon $at = null): array
     {
         $now = ($at ?: now())->setTimezone('Asia/Jakarta');
+
+        // Pemulihan ini melengkapi scheduler pukul 00.00. Bila server dimatikan
+        // pada malam hari, akses pertama ke kiosk tetap membatalkan penutupan
+        // sementara yang sudah melewati hari operasionalnya.
+        if (! isset($this->recoveredServiceIds[$service->id])) {
+            $this->recoveredServiceIds[$service->id] = true;
+            $closures = app(CounterClosureService::class);
+            $recovered = $closures->recoverOverdueClosuresForService((int) $service->id);
+            $clearedPauses = 0;
+
+            if (! $this->hasClearedExpiredPauses) {
+                $this->hasClearedExpiredPauses = true;
+                $clearedPauses = $closures->clearExpiredServiceQueuePauses();
+            }
+
+            if ($recovered > 0 || $clearedPauses > 0) {
+                $service->refresh();
+            }
+        }
 
         if (! $service->is_active || $service->is_archived) {
             return $this->closed('Layanan ini sedang tidak menerima nomor antrean.', 'service_closed');
