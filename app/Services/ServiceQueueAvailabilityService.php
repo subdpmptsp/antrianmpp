@@ -72,6 +72,14 @@ class ServiceQueueAvailabilityService
 
         $settings = QueueOperatingSetting::query()->first();
         $globalSchedule = (array) ($settings?->weekly_schedule ?? []);
+
+        if ($break = app(FridayPrayerBreakService::class)->active($now)) {
+            return $this->closed(
+                'Jeda Istirahat Salat Jumat. Pengambilan nomor dibuka kembali pukul '.$break['ends_at']->format('H.i').' WIB.',
+                'friday_prayer_break',
+            );
+        }
+
         $counters = Counter::withoutGlobalScopes()
             ->where('instansi_id', $service->instansi_id)
             ->where('is_active', true)

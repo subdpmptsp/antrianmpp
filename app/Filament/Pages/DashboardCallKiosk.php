@@ -536,10 +536,10 @@ class DashboardCallKiosk extends Page
                 'servicePrefix' => $servicePrefix,
                 'counterId' => $this->selectedCounter->id,
                 'counterName' => $this->selectedCounter->display_name,
-                // Uji coba pengumuman khusus Bursa Tenaga Kerja di loket 4k1.
-                // Loket lain tetap menggunakan format pengumuman layanan yang ada.
+                // Uji coba Zona 4: gunakan nama instansi agar pengumuman lebih ringkas.
+                // Zona lain tetap menggunakan format pengumuman layanan yang ada.
                 'institutionName' => $this->selectedCounter->instansi?->nama_instansi,
-                'useInstitutionAnnouncement' => strtolower((string) $this->selectedCounter->code_loket) === '4k1',
+                'useInstitutionAnnouncement' => $this->usesInstitutionAnnouncement($this->selectedCounter),
                 'zona' => $zonaName,
                 'calledAt' => now()->format('H:i:s'),
             ];
@@ -605,12 +605,20 @@ class DashboardCallKiosk extends Page
             'counterName' => $this->selectedCounter->display_name,
             // Panggilan ulang harus memakai format yang identik dengan panggilan pertama.
             'institutionName' => $this->selectedCounter->instansi?->nama_instansi,
-            'useInstitutionAnnouncement' => strtolower((string) $this->selectedCounter->code_loket) === '4k1',
+            'useInstitutionAnnouncement' => $this->usesInstitutionAnnouncement($this->selectedCounter),
             'zona' => $zonaName,
             'calledAt' => now()->format('H:i:s'),
         ];
 
         $this->dispatch('announce-queue', $announcementData);
+    }
+
+    private function usesInstitutionAnnouncement(Counter $counter): bool
+    {
+        $zone = mb_strtolower(trim((string) ($counter->instansi?->zone ?? '')));
+        $code = mb_strtolower(trim((string) $counter->code_loket));
+
+        return str_contains($zone, 'zona 4') || preg_match('/^4k(?:-|\d|$)/', $code) === 1;
     }
 
     public function startServing(QueueService $queueService, Queue $queue)

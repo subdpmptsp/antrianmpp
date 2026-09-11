@@ -154,6 +154,8 @@ class QueueResource extends Resource
                 Filter::make('selected_date')
                     ->form([
                         DatePicker::make('selected_date')
+                            ->native(false)
+                            ->closeOnDateSelection()
                             ->label('Tanggal')
                             ->default(Carbon::today())
                             ->closeOnDateSelection(),

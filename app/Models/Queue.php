@@ -37,6 +37,8 @@ class Queue extends Model
         'service_id',
         'number',
         'status',
+        'source',
+        'online_queue_reservation_id',
         'called_at',
         'served_at',
         'canceled_at',
@@ -74,5 +76,10 @@ class Queue extends Model
     public function service()
     {
         return $this->belongsTo(Service::class, 'service_id', 'id');
+    }
+
+    public function onlineReservation()
+    {
+        return $this->belongsTo(OnlineQueueReservation::class, 'online_queue_reservation_id');
     }
 }

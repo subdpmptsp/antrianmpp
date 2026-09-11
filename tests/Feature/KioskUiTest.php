@@ -7,10 +7,15 @@ use App\Models\Counter;
 use App\Models\Instansi;
 use App\Models\Queue;
 use App\Models\QueueOperatingSetting;
+use App\Models\OnlineQueueCheckinChallenge;
+use App\Models\OnlineQueueSession;
+use App\Models\OnlineQueueSetting;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\KioskCatalogService;
+use App\Services\ServiceQueueAvailabilityService;
 use Database\Seeders\TestingSeeder;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -47,8 +52,137 @@ class KioskUiTest extends TestCase
             ->assertSee('data-kiosk-fullscreen', false)
             ->assertDontSee('data-kiosk-pagination', false)
             ->assertDontSee('data-kiosk-page-next', false)
+            ->assertSee('Check-in Antrean Online')
+            ->assertSee(route('public.queue-kiosk', ['online_checkin' => 1]), false)
             ->assertDontSee('Pilih area layanan')
             ->assertDontSee('Konfirmasi pilihan');
+    }
+
+    public function test_online_checkin_stays_inside_kiosk_shell_and_can_return_home(): void
+    {
+        $this->createInstitutionWithService();
+
+        $this->get(route('public.queue-kiosk', ['online_checkin' => 1]))
+            ->assertOk()
+            ->assertSee('data-kiosk-root', false)
+            ->assertSee('Check-in antrean online')
+            ->assertSee('Kembali ke daftar instansi')
+            ->assertSee(route('public.queue-kiosk'), false);
+    }
+
+    public function test_enabled_online_checkin_renders_live_qr_inside_kiosk_shell(): void
+    {
+        [, $service] = $this->createInstitutionWithService();
+        OnlineQueueSetting::current()->update([
+            'global_enabled' => true,
+            'regular_enabled' => true,
+            'pilot_mode' => false,
+        ]);
+        OnlineQueueSession::query()->create([
+            'service_id' => $service->id,
+            'day_of_week' => now('Asia/Jakarta')->isoWeekday(),
+            'starts_at' => '08:00',
+            'ends_at' => '16:00',
+            'quota' => 10,
+            'status' => OnlineQueueSession::STATUS_ACTIVE,
+        ]);
+
+        $this->get(route('public.queue-kiosk', ['online_checkin' => 1]))
+            ->assertOk()
+            ->assertSee('data-online-checkin', false)
+            ->assertSee('Pindai untuk check-in')
+            ->assertSee('data-online-checkin-timer', false)
+            ->assertSee('Kembali ke daftar instansi');
+
+        $this->assertDatabaseCount((new OnlineQueueCheckinChallenge)->getTable(), 1);
+    }
+
+    public function test_online_checkin_hides_qr_when_no_online_session_is_active(): void
+    {
+        [, $service] = $this->createInstitutionWithService();
+        OnlineQueueSetting::current()->update([
+            'global_enabled' => true,
+            'regular_enabled' => true,
+            'pilot_mode' => false,
+        ]);
+        OnlineQueueSession::query()->create([
+            'service_id' => $service->id,
+            'day_of_week' => 1,
+            'starts_at' => '08:00',
+            'ends_at' => '09:00',
+            'quota' => 10,
+            'status' => OnlineQueueSession::STATUS_DRAFT,
+        ]);
+
+        $this->get(route('public.queue-kiosk', ['online_checkin' => 1]))
+            ->assertOk()
+            ->assertSee('Belum ada antrean online aktif.')
+            ->assertSee('QR check-in tidak ditampilkan.')
+            ->assertDontSee('<div class="queue-kiosk__online-checkin"', false);
+
+        $this->assertDatabaseCount((new OnlineQueueCheckinChallenge)->getTable(), 0);
+    }
+
+    public function test_friday_prayer_break_shows_kiosk_modal_and_blocks_ticket_issuance(): void
+    {
+        [, $service] = $this->createInstitutionWithService();
+        $service->update(['is_accepting_queues' => true]);
+        QueueOperatingSetting::query()->update([
+            'weekly_schedule' => collect(range(1, 7))->map(fn (int $day) => [
+                'day' => $day,
+                'is_open' => true,
+                'opens_at' => '08:00',
+                'closes_at' => '16:00',
+                'break_starts_at' => $day === 5 ? '11:30' : null,
+                'break_ends_at' => $day === 5 ? '13:00' : null,
+            ])->all(),
+            'cutoff_minutes' => 0,
+        ]);
+        $fridayNoon = Carbon::parse('2026-09-11 12:00:00', 'Asia/Jakarta');
+        Carbon::setTestNow($fridayNoon);
+
+        try {
+            $this->get(route('public.queue-kiosk'))
+                ->assertOk()
+                ->assertSee('Jeda Istirahat Salat Jumat')
+                ->assertSee('Pengambilan nomor antrean dihentikan sementara.')
+                ->assertSee('pukul 13.00 WIB')
+                ->assertSee('data-kiosk-break-until', false);
+
+            $availability = app(ServiceQueueAvailabilityService::class)->evaluate($service, $fridayNoon);
+            $this->assertFalse($availability['available']);
+            $this->assertSame('friday_prayer_break', $availability['code']);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_global_operational_closure_uses_next_opening_from_weekly_schedule(): void
+    {
+        $this->createInstitutionWithService();
+        QueueOperatingSetting::query()->update([
+            'weekly_schedule' => collect(range(1, 7))->map(fn (int $day) => [
+                'day' => $day,
+                'is_open' => $day !== 7,
+                'opens_at' => $day === 6 ? '07:00' : '07:30',
+                'closes_at' => $day === 5 ? '14:00' : '16:00',
+                'break_starts_at' => null,
+                'break_ends_at' => null,
+            ])->all(),
+            'cutoff_minutes' => 0,
+        ]);
+        Carbon::setTestNow(Carbon::parse('2026-09-11 14:05:00', 'Asia/Jakarta'));
+
+        try {
+            $this->get(route('public.queue-kiosk'))
+                ->assertOk()
+                ->assertSee('Pelayanan Hari Ini Telah Selesai')
+                ->assertSee('Pengambilan nomor antrean untuk hari ini telah ditutup.')
+                ->assertSee('Sabtu · pukul 07.00 WIB')
+                ->assertSee('data-kiosk-operational-closure', false);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_kiosk_catalog_order_does_not_use_current_month_queue_totals(): void

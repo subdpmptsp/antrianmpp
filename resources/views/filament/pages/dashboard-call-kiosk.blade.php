@@ -589,14 +589,14 @@
                                                     <div>
                                                         <label for="temporary-close-time" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Tutup mulai</label>
                                                         <x-filament::input.wrapper>
-                                                            <x-filament::input id="temporary-close-time" type="time" value="{{ now('Asia/Jakarta')->format('H:i') }}" disabled />
+                                                            <x-filament::input id="temporary-close-time" type="text" value="{{ now('Asia/Jakarta')->format('H:i') }}" disabled />
                                                         </x-filament::input.wrapper>
                                                         <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">Berlaku segera setelah disetujui admin.</p>
                                                     </div>
                                                     <div>
                                                         <label for="temporary-reopen-time" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Buka kembali <span class="text-danger-600">*</span></label>
                                                         <x-filament::input.wrapper>
-                                                            <x-filament::input id="temporary-reopen-time" type="time" wire:model="temporaryReopenTime" />
+                                                            <livewire:modern-picker type="time" wire:model.live="temporaryReopenTime" key="temporary-reopen-time" />
                                                         </x-filament::input.wrapper>
                                                         @error('temporaryReopenTime')
                                                             <p class="mt-2 text-xs font-medium text-danger-600">{{ $message }}</p>
@@ -874,7 +874,7 @@
                 const useInstitutionAnnouncement = data?.useInstitutionAnnouncement === true
                     && institutionName !== ''
                 const text = useInstitutionAnnouncement
-                    ? `nomor antrean ${queueNumber}, ${institutionName}, silakan menuju ${counterNameForSpeech}`
+                    ? `nomor antrean ${queueNumber}, silakan menuju ${counterNameForSpeech}, ${institutionName}`
                     : `nomor antrean ${queueNumber}, silakan menuju ${counterNameForSpeech}, untuk ${finalServiceName}`
 
                 return {

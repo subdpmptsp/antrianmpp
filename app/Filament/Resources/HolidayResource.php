@@ -40,6 +40,7 @@ class HolidayResource extends Resource
             Forms\Components\DatePicker::make('date')
                 ->label('Tanggal')
                 ->native(false)
+                ->closeOnDateSelection()
                 ->displayFormat('d F Y')
                 ->unique(ignoreRecord: true)
                 ->required(),

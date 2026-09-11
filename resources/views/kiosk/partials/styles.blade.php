@@ -119,6 +119,33 @@
     .queue-kiosk__empty h3 { margin: 0; font-size: 21px; }
     .queue-kiosk__empty p { margin: 7px 0 0; color: var(--kiosk-muted); }
 
+    .queue-kiosk__online-checkin { max-width: 900px; display: grid; grid-template-columns: 1.1fr .9fr; margin: 0 auto; overflow: hidden; border: 1px solid var(--kiosk-line); border-radius: 22px; background: #fff; box-shadow: 0 14px 35px rgba(31,57,87,.08); }
+    .queue-kiosk__online-copy, .queue-kiosk__online-result { padding: 30px 34px; }
+    .queue-kiosk__online-copy h3 { margin: 0 0 7px; font-size: 25px; }
+    .queue-kiosk__online-copy > p, .queue-kiosk__online-result p, .queue-kiosk__online-qr p { margin: 0; color: var(--kiosk-muted); font-size: 13px; }
+    .queue-kiosk__online-copy ol { display: grid; gap: 12px; margin: 22px 0; padding: 0; list-style: none; }
+    .queue-kiosk__online-copy li { display: flex; align-items: center; gap: 11px; }
+    .queue-kiosk__online-copy li b { width: 30px; height: 30px; display: grid; place-items: center; flex: 0 0 auto; color: #155ca5; border-radius: 50%; background: #e8f2ff; }
+    .queue-kiosk__online-note { padding: 12px 14px; color: #805400; border-radius: 11px; background: #fff6dc; font-size: 12px; }
+    .queue-kiosk__online-result { align-self: center; text-align: center; }
+    .queue-kiosk__online-result > strong { font-size: 25px; }
+    .queue-kiosk__online-result [data-online-checkin-number] { margin: 8px 0; color: #155ca5; font-size: 54px; font-weight: 900; }
+    .queue-kiosk__online-qr { display: grid; place-items: center; align-content: center; padding: 28px; text-align: center; background: #e9f3ff; }
+    .queue-kiosk__online-qr-box { padding: 15px; border-radius: 17px; background: #fff; box-shadow: 0 8px 25px rgba(23,73,121,.12); }
+    .queue-kiosk__online-qr-box svg { display: block; }
+    .queue-kiosk__online-qr > strong { margin-top: 12px; color: #155ca5; }
+    .queue-kiosk__online-qr p { margin-top: 5px; }
+    .queue-kiosk__break-modal { position: fixed; inset: 0; z-index: 220; display: grid; place-items: center; padding: 28px; background: rgba(4, 28, 56, .78); backdrop-filter: blur(5px); }
+    .queue-kiosk__break-modal-card { width: min(100%, 620px); display: grid; justify-items: center; gap: 12px; padding: 42px clamp(28px, 5vw, 58px); color: #163150; text-align: center; border: 1px solid rgba(255,255,255,.7); border-radius: 26px; background: linear-gradient(145deg, #fff, #f1f7ff); box-shadow: 0 24px 70px rgba(0,0,0,.28); }
+    .queue-kiosk__break-modal-icon { width: 64px; height: 64px; display: grid; place-items: center; color: #8a5a00; font-size: 39px; font-weight: 800; border-radius: 20px; background: #fff1c7; }
+    .queue-kiosk__closure-logo { width: 82px; height: 82px; object-fit: contain; }
+    .queue-kiosk__break-modal-card p { margin: 2px 0 0; color: #2563a9; font-size: 12px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+    .queue-kiosk__break-modal-card h2 { margin: 0; font-size: clamp(27px, 3.3vw, 42px); line-height: 1.1; }
+    .queue-kiosk__break-modal-card > strong { font-size: 17px; }
+    .queue-kiosk__break-modal-card > span { color: #5d7087; font-size: 16px; }
+    .queue-kiosk__break-countdown { min-width: 250px; margin-top: 5px; padding: 13px 20px; color: #0e579c; font-size: 20px; font-weight: 850; border: 1px solid #bbd8f5; border-radius: 13px; background: #e8f3ff; }
+    .queue-kiosk__break-modal-card small { color: #697d95; font-size: 13px; }
+
     .queue-kiosk__footer { min-height: 54px; justify-content: space-between; gap: 20px; padding: 0 clamp(24px,4vw,58px); color: #607186; border-top: 1px solid #d7e2ed; background: rgba(255,255,255,.92); font-size: 12px; }
     .queue-kiosk__connection { gap: 9px; color: #24684f; }
     .queue-kiosk__connection i { width: 9px; height: 9px; border-radius: 50%; background: var(--kiosk-success); box-shadow: 0 0 0 4px rgba(20,134,90,.12); }
@@ -185,6 +212,7 @@
     }
 
     @media (max-width: 760px) {
+        .queue-kiosk__online-checkin { grid-template-columns: 1fr; }
         .queue-kiosk__header { min-height: 84px; padding: 13px 16px; }
         .queue-kiosk__brand { gap: 10px; }
         .queue-kiosk__logo--city { width: 46px; height: 46px; }

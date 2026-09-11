@@ -2,8 +2,8 @@
 <div class="space-y-4">
     <div class="attendance-panel p-4">
         <div class="attendance-controls">
-            <div class="attendance-field"><label for="history-from">Dari tanggal</label><input id="history-from" type="date" wire:model.defer="historyFrom"></div>
-            <div class="attendance-field"><label for="history-until">Sampai tanggal</label><input id="history-until" type="date" wire:model.defer="historyUntil"></div>
+            <div class="attendance-field"><livewire:modern-picker type="date" label="Dari tanggal" wire:model.live="historyFrom" key="attendance-history-from" /></div>
+            <div class="attendance-field"><livewire:modern-picker type="date" label="Sampai tanggal" wire:model.live="historyUntil" key="attendance-history-until" /></div>
             <div class="attendance-field"><label for="history-instansi">Instansi</label><select id="history-instansi" wire:model.defer="historyInstansi"><option value="">Semua instansi</option>@foreach($instansiOptions as $id=>$name)<option value="{{ $id }}">{{ $name }}</option>@endforeach</select></div>
             <div class="attendance-field"><label for="history-status">Status</label><select id="history-status" wire:model.defer="historyStatus"><option value="all">Semua status</option><option value="present">Hadir</option><option value="absent">Tidak hadir</option><option value="unassigned">Instansi belum diatur</option></select></div>
             <div class="attendance-field"><label for="history-search">Pencarian</label><input id="history-search" type="search" wire:model.defer="historySearch" placeholder="Petugas/instansi"></div>

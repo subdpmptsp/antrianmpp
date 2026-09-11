@@ -19,11 +19,25 @@ class QueueService
 
     public function __construct(
         private readonly ServiceQueueAvailabilityService $availability,
+        private readonly OnlineQueueChannelPolicyService $channelPolicy,
     ) {}
 
     public function addQueue(int $serviceId): Queue
     {
         return $this->createQueue($serviceId, Queue::STATUS_WAITING);
+    }
+
+    public function addOnlineQueue(int $serviceId, int $reservationId): Queue
+    {
+        $existing = Queue::query()->where('online_queue_reservation_id', $reservationId)->first();
+        if ($existing) {
+            return $existing;
+        }
+
+        return $this->createQueue($serviceId, Queue::STATUS_WAITING, [
+            'source' => 'online',
+            'online_queue_reservation_id' => $reservationId,
+        ]);
     }
 
     public function reserveQueueForPrinting(int $serviceId): Queue
@@ -71,20 +85,22 @@ class QueueService
             ]);
     }
 
-    private function createQueue(int $serviceId, string $status): Queue
+    /** @param array<string, mixed> $metadata */
+    private function createQueue(int $serviceId, string $status, array $metadata = []): Queue
     {
-        return DB::transaction(function () use ($serviceId, $status) {
+        return DB::transaction(function () use ($serviceId, $status, $metadata) {
             $requestedService = Service::query()->findOrFail($serviceId);
 
             $alternatingService = $this->lockAlternatingSharedCounterService($requestedService);
 
             if ($alternatingService) {
-                $this->ensureAvailable($alternatingService);
+                $this->ensureAvailable($alternatingService, $metadata);
 
                 return Queue::create([
                     'service_id' => $alternatingService->id,
                     'number' => $this->generateNumberForService($alternatingService),
                     'status' => $status,
+                    ...$metadata,
                 ]);
             }
 
@@ -95,7 +111,7 @@ class QueueService
                 ->lockForUpdate()
                 ->findOrFail($serviceId);
 
-            $this->ensureAvailable($service);
+            $this->ensureAvailable($service, $metadata);
 
             // Services dengan prefix yang sama memakai satu urutan nomor.
             // Semua baris layanan tersebut dikunci dalam transaksi agar dua
@@ -111,16 +127,27 @@ class QueueService
                 'service_id' => $service->id,
                 'number' => $this->generateNumberForService($service, $serviceIdsForPrefix),
                 'status' => $status,
+                ...$metadata,
             ]);
         });
     }
 
-    private function ensureAvailable(Service $service): void
+    /** @param array<string, mixed> $metadata */
+    private function ensureAvailable(Service $service, array $metadata = []): void
     {
         $availability = $this->availability->evaluate($service);
 
         if (! $availability['available']) {
             throw new QueueUnavailableException($availability['message']);
+        }
+
+        // Online Penuh hanya menghentikan penerbitan tiket langsung di kiosk.
+        // Check-in reservasi online tetap boleh masuk ke urutan antrean layanan.
+        if (($metadata['source'] ?? 'kiosk') !== 'online') {
+            $policy = $this->channelPolicy->onsitePolicy($service);
+            if ($policy['blocked']) {
+                throw new QueueUnavailableException($policy['message']);
+            }
         }
     }
 

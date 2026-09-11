@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Exports\EventParticipantsExport;
-use App\Models\EventQueue;
+use App\Exports\OnlineQueueReservationsExport;
+use App\Exports\QueueChannelRecapExport;
 use Illuminate\Http\Request;
 use App\Exports\RekapLayananExport;
 use App\Models\AntrianSkck;
@@ -12,18 +12,41 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class ExportController extends Controller
 {
-    public function eventParticipants(Request $request, EventQueue $event)
+    public function onlineQueueReservations(Request $request)
     {
-        $status = $request->string('status')->toString();
-        $validStatuses = ['all', 'registered', 'checked_in', 'serving', 'canceled'];
-        abort_unless(in_array($status ?: 'all', $validStatuses, true), 422);
+        $data = $request->validate([
+            'date' => ['nullable', 'date'],
+            'status' => ['nullable', 'in:all,booked,checked_in,canceled,expired'],
+            'service_id' => ['nullable', 'integer', 'exists:services,id'],
+            'search' => ['nullable', 'string', 'max:100'],
+        ]);
+        $status = $data['status'] ?? 'all';
+        $date = isset($data['date']) ? date('Y-m-d', strtotime($data['date'])) : null;
+        $fileDate = $date ?: now('Asia/Jakarta')->format('Y-m-d');
 
-        return Excel::download(
-            new EventParticipantsExport($event, $status ?: 'all'),
-            'peserta-event-'.str($event->slug)->slug().'-'.now()->format('Y-m-d-His').'.xlsx',
-        );
+        return Excel::download(new OnlineQueueReservationsExport(
+            $date,
+            $status,
+            isset($data['service_id']) ? (int) $data['service_id'] : null,
+            $data['search'] ?? null,
+        ), "pendaftar-antrean-online-{$fileDate}.xlsx");
     }
 
+    public function queueChannelRecap(Request $request)
+    {
+        $data = $request->validate([
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+            'service_id' => ['nullable', 'integer', 'exists:services,id'],
+        ]);
+        $from = $data['from'] ?? now('Asia/Jakarta')->startOfMonth()->toDateString();
+        $to = $data['to'] ?? now('Asia/Jakarta')->toDateString();
+
+        return Excel::download(
+            new QueueChannelRecapExport($from, $to, $request->integer('service_id') ?: null),
+            'rekap-kanal-antrean-'.$from.'-sd-'.$to.'.xlsx',
+        );
+    }
 
     private $bulan = [
         1 => 'Januari',

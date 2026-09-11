@@ -70,8 +70,8 @@ class MonitoringDashboard extends Page implements Forms\Contracts\HasForms
     {
         return $form->schema([
             Forms\Components\Grid::make(2)->schema([
-                Forms\Components\DatePicker::make('from')->label('Dari Tanggal')->required(),
-                Forms\Components\DatePicker::make('to')->label('Sampai Tanggal')->required(),
+                Forms\Components\DatePicker::make('from')->label('Dari Tanggal')->native(false)->closeOnDateSelection()->required(),
+                Forms\Components\DatePicker::make('to')->label('Sampai Tanggal')->native(false)->closeOnDateSelection()->required(),
             ]),
         ])->statePath('data');
     }

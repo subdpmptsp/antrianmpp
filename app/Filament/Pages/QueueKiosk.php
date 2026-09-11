@@ -8,6 +8,7 @@ use App\Models\Service;
 use App\Services\KioskCatalogService;
 use App\Services\QueueService;
 use App\Services\ServiceQueueAvailabilityService;
+use App\Services\OnlineQueueChannelPolicyService;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
@@ -90,8 +91,13 @@ class QueueKiosk extends Page
         $this->services = app(KioskCatalogService::class)
             ->withDisdukcapilConsultationQueueCounts($services);
         $availability = app(ServiceQueueAvailabilityService::class);
-        $this->services->each(function (Service $service) use ($availability): void {
+        $channelPolicy = app(OnlineQueueChannelPolicyService::class);
+        $this->services->each(function (Service $service) use ($availability, $channelPolicy): void {
             $state = $availability->evaluate($service);
+            $policy = $channelPolicy->onsitePolicy($service);
+            if ($state['available'] && $policy['blocked']) {
+                $state = ['available' => false, 'message' => $policy['message']];
+            }
             $service->setAttribute('queue_available', $state['available']);
             $service->setAttribute('queue_unavailable_message', $state['message']);
         });

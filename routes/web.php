@@ -10,7 +10,8 @@ use App\Http\Controllers\AudioController;
 use App\Http\Controllers\BarcodeController;
 use App\Http\Controllers\DashboardMppController;
 use App\Http\Controllers\ExportController;
-use App\Http\Controllers\EventQueuePublicController;
+use App\Http\Controllers\OnlineQueuePublicController;
+use App\Http\Controllers\OnlineQueueCheckinController;
 use App\Http\Controllers\PublicQueueKioskController;
 use App\Http\Controllers\PublicWaitingRoomTvController;
 use App\Http\Controllers\QueuePrintController;
@@ -32,46 +33,38 @@ Route::get('/dashboard-mpp', [DashboardMppController::class, 'index'])
 Route::get('/api/dashboard-mpp', [DashboardMppController::class, 'data'])
     ->name('api.showcase.siola-data');
 
-// Antrean Event berdiri sendiri dari antrean reguler: data, tiket, QR, dan TV-nya
-// hanya menggunakan tabel event_queue_* dan tidak pernah memanggil layanan Queue.
-Route::get('/event/{token}', [EventQueuePublicController::class, 'registration'])
-    ->name('event.registration');
-Route::post('/event/{token}/register', [EventQueuePublicController::class, 'register'])
-    ->middleware('throttle:10,1')
-    ->name('event.register');
-Route::get('/event/{token}/ticket/{ticket}', [EventQueuePublicController::class, 'ticket'])
-    ->name('event.ticket');
-Route::get('/event/{token}/ticket/{ticket}/download', [EventQueuePublicController::class, 'downloadTicket'])
-    ->name('event.ticket.download');
-Route::get('/event/{token}/ticket/{ticket}/calendar', [EventQueuePublicController::class, 'calendar'])
-    ->name('event.ticket.calendar');
-Route::get('/event/{token}/cek-tiket', [EventQueuePublicController::class, 'lookup'])
-    ->name('event.lookup');
-Route::post('/event/{token}/cek-tiket', [EventQueuePublicController::class, 'findTicket'])
-    ->middleware('throttle:10,1')
-    ->name('event.lookup.find');
-Route::get('/event/{token}/ticket/{ticket}/download', [EventQueuePublicController::class, 'downloadTicket'])
-    ->name('event.ticket.download');
-Route::get('/event/{token}/ticket/{ticket}/calendar', [EventQueuePublicController::class, 'calendar'])
-    ->name('event.ticket.calendar');
-Route::get('/event/{token}/cek-tiket', [EventQueuePublicController::class, 'lookup'])
-    ->name('event.lookup');
-Route::post('/event/{token}/cek-tiket', [EventQueuePublicController::class, 'findTicket'])
-    ->middleware('throttle:10,1')
-    ->name('event.lookup.find');
-Route::get('/event-tv/{token}', [EventQueuePublicController::class, 'tv'])
-    ->name('event.tv');
-Route::get('/api/event-tv/{token}', [EventQueuePublicController::class, 'tvStatus'])
-    ->middleware('throttle:60,1')
-    ->name('event.tv.status');
+// Pratinjau frontend Antrean Online. Belum menyimpan reservasi, mengubah kuota,
+// melakukan check-in, atau menerbitkan nomor antrean reguler.
+Route::view('/antrean-online/preview', 'online-queue.registration-preview')
+    ->name('online-queue.preview.registration');
+Route::view('/antrean-online/check-in-preview/{token?}', 'online-queue.checkin-preview')
+    ->name('online-queue.preview.checkin');
+Route::view('/kiosk/check-in-online-preview', 'online-queue.kiosk-checkin-preview')
+    ->name('online-queue.preview.kiosk');
+
+Route::get('/antrean-online', [OnlineQueuePublicController::class, 'index'])->name('online-queue.index');
+Route::post('/antrean-online', [OnlineQueuePublicController::class, 'store'])->middleware('throttle:15,1')->name('online-queue.store');
+Route::get('/antrean-online/tiket/{token}', [OnlineQueuePublicController::class, 'ticket'])->name('online-queue.ticket');
+Route::post('/antrean-online/tiket/{token}/batal', [OnlineQueuePublicController::class, 'cancel'])->middleware('throttle:10,1')->name('online-queue.cancel');
+Route::get('/antrean-online/tiket/{token}/kalender', [OnlineQueuePublicController::class, 'calendar'])->name('online-queue.calendar');
+Route::get('/antrean-online/cari', [OnlineQueuePublicController::class, 'lookup'])->name('online-queue.lookup');
+Route::post('/antrean-online/cari', [OnlineQueuePublicController::class, 'find'])->middleware('throttle:10,1')->name('online-queue.lookup.find');
+Route::get('/antrean-online/check-in/{token}', [OnlineQueueCheckinController::class, 'phone'])->name('online-queue.checkin.phone');
+Route::post('/antrean-online/check-in/{token}', [OnlineQueueCheckinController::class, 'confirm'])->middleware('throttle:8,1')->name('online-queue.checkin.confirm');
+Route::get('/api/antrean-online/check-in/{token}', [OnlineQueueCheckinController::class, 'status'])->middleware('throttle:90,1')->name('online-queue.checkin.status');
+Route::get('/kiosk/check-in-online', [OnlineQueueCheckinController::class, 'kiosk'])->name('online-queue.checkin.kiosk');
 
 Route::middleware(['auth', 'admin'])
     ->get('/exports/rekap-layanan', [ExportController::class, 'rekapLayanan'])
     ->name('export.rekap-layanan');
 
 Route::middleware(['auth', 'admin'])
-    ->get('/exports/event/{event}/peserta', [ExportController::class, 'eventParticipants'])
-    ->name('export.event-participants');
+    ->get('/exports/antrean-online', [ExportController::class, 'onlineQueueReservations'])
+    ->name('export.online-queue-reservations');
+
+Route::middleware(['auth', 'admin'])
+    ->get('/exports/rekap-kanal-antrean', [ExportController::class, 'queueChannelRecap'])
+    ->name('export.queue-channel-recap');
 
 Route::middleware(['auth', 'admin'])->get('/exports/monitoring-realtime', function (Request $request) {
     return Excel::download(

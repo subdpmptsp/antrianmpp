@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\CitizenIdentityVerifier;
 use App\Listeners\RecordAttendanceOnLogin;
 use App\Listeners\RecordAttendanceOnLogout;
 use App\Models\User;
@@ -9,6 +10,8 @@ use App\Services\QueueService;
 use App\Services\ServiceQueueAvailabilityService;
 use App\Services\ThermalPrinterService;
 use App\Services\MppBrandingService;
+use App\Services\DisabledCitizenIdentityVerifier;
+use App\Services\OnlineQueueChannelPolicyService;
 use Filament\Support\Assets\Js;
 use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Facades\FilamentView;
@@ -27,6 +30,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Titik sambung resmi untuk API Dukcapil. Implementasi aman tetap
+        // nonaktif sampai kontrak API dan kredensial tersedia.
+        $this->app->singleton(CitizenIdentityVerifier::class, DisabledCitizenIdentityVerifier::class);
+
         $this->app->singleton(ThermalPrinterService::class, function ($app) {
             return new ThermalPrinterService;
         });
@@ -34,6 +41,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(QueueService::class, function ($app) {
             return new QueueService(
                 $app->make(ServiceQueueAvailabilityService::class),
+                $app->make(OnlineQueueChannelPolicyService::class),
             );
         });
 

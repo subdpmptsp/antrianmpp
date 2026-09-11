@@ -47,6 +47,7 @@ class ServiceQueueDateOverrideResource extends Resource
             Forms\Components\DatePicker::make('date')
                 ->label('Tanggal khusus')
                 ->native(false)
+                ->closeOnDateSelection()
                 ->required(),
             Forms\Components\Toggle::make('is_closed')
                 ->label('Tutup pengambilan antrean pada tanggal ini')

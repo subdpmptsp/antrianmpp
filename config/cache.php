@@ -40,7 +40,9 @@ return [
 
         'database' => [
             'driver' => 'database',
-            'connection' => env('DB_CACHE_CONNECTION'),
+            // Cache operasional tidak boleh mengikuti fallback SQLite bawaan
+            // framework karena kiosk harus tetap menggunakan database produksi.
+            'connection' => env('DB_CACHE_CONNECTION', 'mysql'),
             'table' => env('DB_CACHE_TABLE', 'cache'),
             'lock_connection' => env('DB_CACHE_LOCK_CONNECTION'),
             'lock_table' => env('DB_CACHE_LOCK_TABLE'),

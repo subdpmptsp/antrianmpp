@@ -89,6 +89,7 @@ class AttendanceResource extends Resource
                             ->default(now())
                             ->displayFormat('d F Y')
                             ->native(false)
+                            ->closeOnDateSelection()
                             ->id('attendance-date-filter')
                             ->extraAttributes([
                                 'name' => 'attendance-date-filter',

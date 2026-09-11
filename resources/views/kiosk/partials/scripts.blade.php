@@ -67,6 +67,9 @@
                 if (!nextContent || !currentContent) throw new Error('Konten kiosk tidak lengkap.')
 
                 currentContent.replaceWith(nextContent)
+                root.querySelector('[data-kiosk-break-until], [data-kiosk-operational-closure]')?.remove()
+                const nextGlobalModal = nextRoot.querySelector('[data-kiosk-break-until], [data-kiosk-operational-closure]')
+                if (nextGlobalModal) root.append(nextGlobalModal)
                 root.dataset.step = nextRoot.dataset.step || '1'
                 if (pushHistory) window.history.pushState({ kiosk: true }, '', url)
                 initializeKiosk()
@@ -106,7 +109,10 @@
         const showError = (message) => {
             processing = false
             setLoading(false)
-            if (errorMessage) errorMessage.textContent = message || 'Silakan hubungi petugas.'
+            const safeMessage = !message || /server error|internal server|permintaan gagal/i.test(message)
+                ? 'Koneksi ke server sempat terganggu. Silakan sentuh Kembali dan coba lagi.'
+                : message
+            if (errorMessage) errorMessage.textContent = safeMessage
             if (errorOverlay) errorOverlay.hidden = false
         }
 
@@ -163,6 +169,80 @@
 
         window.queueKioskHandleTicket = (payload) => printTicket(payload)
         window.queueKioskShowError = showError
+
+        const onlineCheckin = root.querySelector('[data-online-checkin]')
+        const breakModal = root.querySelector('[data-kiosk-break-until]')
+        if (breakModal) {
+            const countdown = breakModal.querySelector('[data-kiosk-break-countdown]')
+            const reopenAt = new Date(breakModal.dataset.kioskBreakUntil)
+            const updateBreakCountdown = () => {
+                const seconds = Math.max(0, Math.ceil((reopenAt.getTime() - Date.now()) / 1000))
+                if (countdown) {
+                    countdown.textContent = seconds > 0
+                        ? `Buka kembali dalam ${String(Math.floor(seconds / 3600)).padStart(2, '0')}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+                        : 'Memuat kembali layanan…'
+                }
+                if (seconds <= 0) {
+                    breakModal.remove()
+                    window.__queueKioskNavigate?.(root.dataset.homeUrl, false)
+                }
+            }
+            updateBreakCountdown()
+            const breakCountdownInterval = window.setInterval(updateBreakCountdown, 1000)
+            signal.addEventListener('abort', () => window.clearInterval(breakCountdownInterval), { once: true })
+        }
+        if (onlineCheckin) {
+            const timer = onlineCheckin.querySelector('[data-online-checkin-timer]')
+            const waiting = onlineCheckin.querySelector('[data-online-checkin-waiting]')
+            const result = onlineCheckin.querySelector('[data-online-checkin-result]')
+            const number = onlineCheckin.querySelector('[data-online-checkin-number]')
+            let secondsLeft = 90
+            let checkinCompleted = false
+
+            const refreshCheckin = () => navigateWithinKiosk(window.location.href, false)
+            const countdownInterval = window.setInterval(() => {
+                if (checkinCompleted) return
+                secondsLeft -= 1
+                if (timer) {
+                    timer.textContent = `Berlaku ${String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:${String(Math.max(0, secondsLeft % 60)).padStart(2, '0')}`
+                }
+                if (secondsLeft <= 0) refreshCheckin()
+            }, 1000)
+
+            const pollInterval = window.setInterval(async () => {
+                if (checkinCompleted) return
+
+                try {
+                    const response = await fetch(onlineCheckin.dataset.statusUrl, {
+                        credentials: 'same-origin',
+                        headers: { Accept: 'application/json' },
+                        signal,
+                    })
+                    if (response.status === 410) {
+                        refreshCheckin()
+                        return
+                    }
+                    if (!response.ok) return
+
+                    const payload = await response.json()
+                    if (payload.status !== 'completed') return
+
+                    checkinCompleted = true
+                    if (waiting) waiting.hidden = true
+                    if (result) result.hidden = false
+                    if (number) number.textContent = payload.number || ''
+                    setLoading(true)
+                    await printTicket(payload)
+                } catch (error) {
+                    if (error.name !== 'AbortError' && checkinCompleted) showError(error.message)
+                }
+            }, 1800)
+
+            signal.addEventListener('abort', () => {
+                window.clearInterval(countdownInterval)
+                window.clearInterval(pollInterval)
+            }, { once: true })
+        }
 
         serviceButtons.forEach((button) => {
             button.addEventListener('click', async () => {
@@ -228,7 +308,7 @@
         // layanan paling lambat satu menit sekali ketika sedang diam. Satu
         // request ringan ini membuat pesan istirahat dan pembukaan kembali
         // muncul otomatis tanpa mengganggu proses cetak yang sedang berjalan.
-        if (root.dataset.mode === 'public' && root.dataset.step === '2') {
+        if (root.dataset.mode === 'public' && !onlineCheckin && !breakModal) {
             availabilityRefreshTimer = window.setInterval(() => {
                 if (processing) return
 
@@ -240,7 +320,7 @@
         const resetIdleTimer = () => {
             if (root.dataset.step === '1' || processing) return
             window.clearTimeout(idleTimer)
-            idleTimer = window.setTimeout(goHome, 45000)
+            idleTimer = window.setTimeout(goHome, onlineCheckin ? 180000 : 45000)
         }
         root.addEventListener('pointerdown', resetIdleTimer, { signal })
         root.addEventListener('keydown', resetIdleTimer, { signal })

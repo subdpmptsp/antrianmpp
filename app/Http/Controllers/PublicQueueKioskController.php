@@ -4,11 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Exceptions\QueueUnavailableException;
 use App\Models\Queue;
+use App\Models\OnlineQueueCheckinChallenge;
+use App\Models\OnlineQueueSession;
+use App\Models\OnlineQueueSetting;
 use App\Models\Service;
 use App\Services\KioskCatalogService;
 use App\Services\MasterDataCache;
 use App\Services\QueueService;
 use App\Services\ServiceQueueAvailabilityService;
+use App\Services\OnlineQueueChannelPolicyService;
+use App\Services\FridayPrayerBreakService;
+use App\Services\KioskOperationalClosureService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -35,6 +41,29 @@ class PublicQueueKioskController extends Controller
             ->values();
 
         $selectedInstansi = $request->integer('instansi') ?: null;
+        $kioskBreak = app(FridayPrayerBreakService::class)->active();
+        $kioskOperationalClosure = $kioskBreak ? null : app(KioskOperationalClosureService::class)->active();
+        $showOnlineCheckin = ! $selectedInstansi && $request->boolean('online_checkin');
+        $onlineCheckinEnabled = false;
+        $onlineCheckinToken = null;
+
+        if ($showOnlineCheckin) {
+            $onlineSettings = OnlineQueueSetting::current();
+            $onlineCheckinEnabled = ! $kioskBreak && ! $kioskOperationalClosure && $this->hasActiveOnlineSession($onlineSettings);
+
+            if ($onlineCheckinEnabled) {
+                $onlineCheckinToken = Str::random(64);
+                OnlineQueueCheckinChallenge::query()->create([
+                    'token_hash' => hash('sha256', $onlineCheckinToken),
+                    'station_code' => config('kiosk.online_checkin_station', 'KIOSK-01'),
+                    'expires_at' => now()->addSeconds(90),
+                ]);
+                OnlineQueueCheckinChallenge::query()
+                    ->whereNull('completed_at')
+                    ->where('expires_at', '<', now()->subMinutes(10))
+                    ->delete();
+            }
+        }
         $showBpjsChoices = ! $selectedInstansi && $request->boolean('bpjs') && $bpjsInstansis->isNotEmpty();
         $selectedInstitution = $selectedInstansi
             ? $instansis->firstWhere('instansi_id', $selectedInstansi)
@@ -111,11 +140,35 @@ class PublicQueueKioskController extends Controller
             'bpjsInstansis' => $bpjsInstansis,
             'bpjsDirectServices' => $bpjsDirectServices,
             'showBpjsChoices' => $showBpjsChoices,
+            'showOnlineCheckin' => $showOnlineCheckin,
+            'onlineCheckinEnabled' => $onlineCheckinEnabled,
+            'onlineCheckinToken' => $onlineCheckinToken,
+            'kioskBreak' => $kioskBreak,
+            'kioskOperationalClosure' => $kioskOperationalClosure,
             'services' => $services,
             'queueRequestToken' => $queueRequestToken,
         ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             ->header('Pragma', 'no-cache')
             ->header('Expires', '0');
+    }
+
+    private function hasActiveOnlineSession(OnlineQueueSetting $settings): bool
+    {
+        if (! $settings->global_enabled || ! $settings->regular_enabled) {
+            return false;
+        }
+
+        $sessions = OnlineQueueSession::query()
+            ->where('status', OnlineQueueSession::STATUS_ACTIVE)
+            ->whereHas('service', fn ($service) => $service
+                ->where('is_active', true)
+                ->where('is_archived', false));
+
+        if ($settings->pilot_mode) {
+            $sessions->whereIn('service_id', array_map('intval', $settings->pilot_service_ids ?? []));
+        }
+
+        return $sessions->exists();
     }
 
     public function selectService(Request $request, int $serviceId, QueueService $queueService): JsonResponse
@@ -168,8 +221,13 @@ class PublicQueueKioskController extends Controller
 
     private function attachQueueAvailability($services, ServiceQueueAvailabilityService $availability): void
     {
-        $services->each(function (Service $service) use ($availability): void {
+        $channelPolicy = app(OnlineQueueChannelPolicyService::class);
+        $services->each(function (Service $service) use ($availability, $channelPolicy): void {
             $state = $availability->evaluate($service);
+            $policy = $channelPolicy->onsitePolicy($service);
+            if ($state['available'] && $policy['blocked']) {
+                $state = ['available' => false, 'message' => $policy['message']];
+            }
             $service->setAttribute('queue_available', $state['available']);
             $service->setAttribute('queue_unavailable_message', $state['message']);
         });

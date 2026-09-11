@@ -9,8 +9,7 @@ use App\Models\Holiday;
 use App\Models\QueueOperatingSetting;
 use App\Models\Service;
 use App\Models\ServiceQueueDateOverride;
-use App\Services\ServiceQueueAvailabilityService;
-use Carbon\Carbon;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 
@@ -40,15 +39,22 @@ class QueueOperatingSchedule extends Page
     public ?string $serviceClosureDate = null;
     public ?int $serviceClosureServiceId = null;
     public ?string $serviceClosureReason = null;
-    public ?int $simulationCounterId = null;
-    public ?string $simulationDate = null;
-    public string $simulationTime = '08:00';
-    /** @var array{available: bool, message: string, code: string}|null */
-    public ?array $simulationResult = null;
 
     public static function canAccess(): bool
     {
         return auth()->user()?->can('access-admin-area') ?? false;
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('previewNewLayout')
+                ->label('Pratinjau tampilan baru')
+                ->icon('heroicon-o-squares-2x2')
+                ->color('gray')
+                ->url(JadwalKetersediaanPreview::getUrl())
+                ->openUrlInNewTab(),
+        ];
     }
 
     public function mount(): void
@@ -56,8 +62,6 @@ class QueueOperatingSchedule extends Page
         $this->loadGlobalSettings();
         $firstCounter = $this->counters->first();
         $this->selectedCounterId = $firstCounter?->id;
-        $this->simulationCounterId = $firstCounter?->id;
-        $this->simulationDate = now('Asia/Jakarta')->toDateString();
         $this->holidayDate = now('Asia/Jakarta')->toDateString();
         $this->serviceClosureDate = now('Asia/Jakarta')->toDateString();
         $this->loadCounterOverride();
@@ -89,9 +93,30 @@ class QueueOperatingSchedule extends Page
                 }
                 $this->weeklySchedule[$index]['opens_at'] = $open;
                 $this->weeklySchedule[$index]['closes_at'] = $close;
+
+                if ((int) $this->weeklySchedule[$index]['day'] === 5) {
+                    $breakStart = substr((string) ($day['break_starts_at'] ?? ''), 0, 5);
+                    $breakEnd = substr((string) ($day['break_ends_at'] ?? ''), 0, 5);
+                    if (($breakStart === '') !== ($breakEnd === '')
+                        || ($breakStart !== '' && (! preg_match('/^\d{2}:\d{2}$/', $breakStart)
+                            || ! preg_match('/^\d{2}:\d{2}$/', $breakEnd)
+                            || $open >= $breakStart
+                            || $breakStart >= $breakEnd
+                            || $breakEnd >= $close))) {
+                        Notification::make()->title('Rentang jeda Jumat belum valid.')->body('Isi kedua jam dan pastikan berada di antara jam buka dan tutup.')->danger()->send();
+                        return;
+                    }
+                    $this->weeklySchedule[$index]['break_starts_at'] = $breakStart ?: null;
+                    $this->weeklySchedule[$index]['break_ends_at'] = $breakEnd ?: null;
+                } else {
+                    $this->weeklySchedule[$index]['break_starts_at'] = null;
+                    $this->weeklySchedule[$index]['break_ends_at'] = null;
+                }
             } else {
                 $this->weeklySchedule[$index]['opens_at'] = null;
                 $this->weeklySchedule[$index]['closes_at'] = null;
+                $this->weeklySchedule[$index]['break_starts_at'] = null;
+                $this->weeklySchedule[$index]['break_ends_at'] = null;
             }
         }
 
@@ -102,7 +127,7 @@ class QueueOperatingSchedule extends Page
                 'default_daily_quota' => $this->defaultDailyQuota ?: null,
             ]);
 
-        Notification::make()->title('Jadwal global tersimpan.')->success()->send();
+        Notification::make()->title('Perubahan jadwal tersimpan.')->success()->send();
     }
 
     public function saveCounterOverride(): void
@@ -184,17 +209,6 @@ class QueueOperatingSchedule extends Page
         Notification::make()->title('Tanggal khusus layanan dihapus.')->success()->send();
     }
 
-    public function simulate(): void
-    {
-        $counter = Counter::withoutGlobalScopes()->with('service')->find($this->simulationCounterId);
-        if (! $counter?->service || ! $this->simulationDate) {
-            Notification::make()->title('Pilih loket yang memiliki layanan untuk simulasi.')->warning()->send();
-            return;
-        }
-        $at = Carbon::createFromFormat('Y-m-d H:i', $this->simulationDate.' '.substr($this->simulationTime, 0, 5), 'Asia/Jakarta');
-        $this->simulationResult = app(ServiceQueueAvailabilityService::class)->evaluate($counter->service, $at);
-    }
-
     public function getCountersProperty()
     {
         return Counter::withoutGlobalScopes()->with(['instansi', 'service'])->where('is_archived', false)
@@ -247,7 +261,14 @@ class QueueOperatingSchedule extends Page
         $byDay = collect($schedule)->mapWithKeys(fn ($item) => [(int) ((array) $item)['day'] => (array) $item]);
         return collect(range(1, 7))->map(function (int $day) use ($byDay): array {
             $item = $byDay->get($day, []);
-            return ['day' => $day, 'is_open' => (bool) ($item['is_open'] ?? false), 'opens_at' => $item['opens_at'] ?? '08:00', 'closes_at' => $item['closes_at'] ?? '16:00'];
+            return [
+                'day' => $day,
+                'is_open' => (bool) ($item['is_open'] ?? false),
+                'opens_at' => $item['opens_at'] ?? '08:00',
+                'closes_at' => $item['closes_at'] ?? '16:00',
+                'break_starts_at' => $day === 5 ? ($item['break_starts_at'] ?? null) : null,
+                'break_ends_at' => $day === 5 ? ($item['break_ends_at'] ?? null) : null,
+            ];
         })->all();
     }
 
@@ -259,7 +280,7 @@ class QueueOperatingSchedule extends Page
             ['day' => 2, 'is_open' => true, 'opens_at' => '08:00', 'closes_at' => '16:00'],
             ['day' => 3, 'is_open' => true, 'opens_at' => '08:00', 'closes_at' => '16:00'],
             ['day' => 4, 'is_open' => true, 'opens_at' => '08:00', 'closes_at' => '16:00'],
-            ['day' => 5, 'is_open' => true, 'opens_at' => '08:00', 'closes_at' => '16:30'],
+            ['day' => 5, 'is_open' => true, 'opens_at' => '08:00', 'closes_at' => '16:30', 'break_starts_at' => null, 'break_ends_at' => null],
             ['day' => 6, 'is_open' => false, 'opens_at' => null, 'closes_at' => null],
             ['day' => 7, 'is_open' => false, 'opens_at' => null, 'closes_at' => null],
         ];

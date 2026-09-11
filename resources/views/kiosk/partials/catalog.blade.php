@@ -9,13 +9,14 @@
     $bpjsInstansis = collect($bpjsInstansis ?? []);
     $bpjsDirectServices = collect($bpjsDirectServices ?? []);
     $showBpjsChoices = (bool) ($showBpjsChoices ?? false);
+    $showOnlineCheckin = (bool) ($showOnlineCheckin ?? false);
 @endphp
 
 <div
     class="queue-kiosk"
     data-kiosk-root
     data-mode="{{ $isLivewire ? 'livewire' : 'public' }}"
-    data-step="{{ $selectedInstansi ? 2 : 1 }}"
+    data-step="{{ ($selectedInstansi || $showOnlineCheckin) ? 2 : 1 }}"
     data-home-url="{{ route('public.queue-kiosk') }}"
 >
     <header class="queue-kiosk__header">
@@ -46,7 +47,53 @@
 
     <main class="queue-kiosk__main">
         <section class="queue-kiosk__content">
-            @if (! $selectedInstansi)
+            @if ($showOnlineCheckin)
+                <div class="queue-kiosk__toolbar">
+                    <a class="queue-kiosk__back" data-kiosk-navigation href="{{ route('public.queue-kiosk') }}">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                        Kembali ke daftar instansi
+                    </a>
+                    <div class="queue-kiosk__selected-institution">
+                        <span><small>Menu terpilih</small><strong>Check-in Antrean Online</strong></span>
+                    </div>
+                </div>
+
+                <div class="queue-kiosk__intro">
+                    <h2>Check-in antrean online</h2>
+                    <p>Pindai QR menggunakan HP untuk mengaktifkan reservasi dan mencetak tiket.</p>
+                </div>
+
+                @if (! ($onlineCheckinEnabled ?? false))
+                    <div class="queue-kiosk__empty">
+                        <h3>Belum ada antrean online aktif.</h3>
+                        <p>QR check-in tidak ditampilkan. Silakan kembali ke daftar instansi.</p>
+                    </div>
+                @else
+                    <div class="queue-kiosk__online-checkin" data-online-checkin
+                        data-status-url="{{ route('online-queue.checkin.status', $onlineCheckinToken) }}">
+                        <div class="queue-kiosk__online-copy" data-online-checkin-waiting>
+                            <h3>Pindai untuk check-in</h3>
+                            <p>Gunakan kamera HP atau Google Lens. Siapkan kode booking dan 4 digit terakhir NIK.</p>
+                            <ol>
+                                <li><b>1</b><span>Pindai QR pada layar ini.</span></li>
+                                <li><b>2</b><span>Konfirmasi data reservasi melalui HP.</span></li>
+                                <li><b>3</b><span>Ambil tiket yang dicetak mesin.</span></li>
+                            </ol>
+                            <div class="queue-kiosk__online-note">QR berlaku singkat dan hanya menerima satu check-in.</div>
+                        </div>
+                        <div class="queue-kiosk__online-result" data-online-checkin-result hidden>
+                            <strong>Check-in berhasil</strong>
+                            <div data-online-checkin-number></div>
+                            <p>Mohon tunggu, tiket sedang dicetak.</p>
+                        </div>
+                        <div class="queue-kiosk__online-qr">
+                            <div class="queue-kiosk__online-qr-box">{!! \SimpleSoftwareIO\QrCode\Facades\QrCode::size(220)->margin(1)->generate(route('online-queue.checkin.phone', $onlineCheckinToken)) !!}</div>
+                            <strong data-online-checkin-timer>Berlaku 01:30</strong>
+                            <p>QR akan diperbarui otomatis setelah waktunya habis.</p>
+                        </div>
+                    </div>
+                @endif
+            @elseif (! $selectedInstansi)
                 @if ($showBpjsChoices)
                     <div class="queue-kiosk__intro">
                         <h2>Pilih layanan BPJS</h2>
@@ -124,6 +171,23 @@
                                 @endif
                             @endif
                         @endforeach
+
+                        <a
+                            class="queue-kiosk__institution-card queue-kiosk__institution-card--catalog"
+                            data-kiosk-navigation
+                            href="{{ route('public.queue-kiosk', ['online_checkin' => 1]) }}"
+                            aria-label="Buka check-in antrean online"
+                        >
+                            <span class="queue-kiosk__institution-logo is-fallback">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 4.5A.75.75 0 0 1 4.5 3.75h4.125a.75.75 0 0 1 .75.75v4.125a.75.75 0 0 1-.75.75H4.5a.75.75 0 0 1-.75-.75V4.5Zm10.875 0a.75.75 0 0 1 .75-.75H19.5a.75.75 0 0 1 .75.75v4.125a.75.75 0 0 1-.75.75h-4.125a.75.75 0 0 1-.75-.75V4.5ZM3.75 15.375a.75.75 0 0 1 .75-.75h4.125a.75.75 0 0 1 .75.75V19.5a.75.75 0 0 1-.75.75H4.5a.75.75 0 0 1-.75-.75v-4.125Zm10.875-.75h2.25v2.25h-2.25v-2.25Zm3.375 0h2.25v2.25H18v-2.25Zm-3.375 3.375h2.25v2.25h-2.25V18Zm3.375 0h2.25v2.25H18V18Z"/>
+                                </svg>
+                            </span>
+                            <span class="queue-kiosk__institution-copy">
+                                <strong>Check-in Antrean Online</strong>
+                                <small>Pindai QR booking</small>
+                            </span>
+                        </a>
                     </div>
                 @endif
                 @endif
@@ -320,6 +384,34 @@
         <p data-kiosk-error-message>Silakan hubungi petugas.</p>
         <button type="button" data-kiosk-error-home>Kembali</button>
     </div>
+
+    @if ($kioskBreak ?? false)
+        <section class="queue-kiosk__break-modal" role="alertdialog" aria-modal="true" aria-labelledby="kiosk-break-title" data-kiosk-break-until="{{ $kioskBreak['ends_at']->toIso8601String() }}">
+            <div class="queue-kiosk__break-modal-card">
+                <span class="queue-kiosk__break-modal-icon" aria-hidden="true">◷</span>
+                <p>MPP SIOLA</p>
+                <h2 id="kiosk-break-title">Jeda Istirahat Salat Jumat</h2>
+                <strong>Pengambilan nomor antrean dihentikan sementara.</strong>
+                <span>Pelayanan dan pengambilan nomor dibuka kembali pukul {{ $kioskBreak['ends_at']->format('H.i') }} WIB.</span>
+                <div class="queue-kiosk__break-countdown" data-kiosk-break-countdown>Memuat waktu…</div>
+                <small>Silakan kembali setelah waktu buka kembali.</small>
+            </div>
+        </section>
+    @elseif ($kioskOperationalClosure ?? false)
+        <section class="queue-kiosk__break-modal" role="alertdialog" aria-modal="true" aria-labelledby="kiosk-closure-title" data-kiosk-operational-closure>
+            <div class="queue-kiosk__break-modal-card">
+                <img class="queue-kiosk__closure-logo" src="{{ $mppBranding['logo_url'] }}" alt="Logo {{ $mppBranding['name'] }}">
+                <p>MPP SIOLA</p>
+                <h2 id="kiosk-closure-title">Pelayanan Hari Ini Telah Selesai</h2>
+                <strong>Pengambilan nomor antrean untuk hari ini telah ditutup.</strong>
+                <span>Pelayanan kembali dibuka</span>
+                <div class="queue-kiosk__break-countdown">
+                    {{ $kioskOperationalClosure['opens_at']->locale('id')->translatedFormat('l') }} · pukul {{ $kioskOperationalClosure['opens_at']->format('H.i') }} WIB
+                </div>
+                <small>Terima kasih atas pengertian Anda.</small>
+            </div>
+        </section>
+    @endif
 
     @if ($isLivewire)
         <div class="queue-kiosk__wire-loading" wire:loading.flex wire:target="selectInstansi,resetSelection">

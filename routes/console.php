@@ -4,6 +4,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 use App\Services\QueueService;
+use App\Services\OnlineQueueService;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -37,4 +38,10 @@ Schedule::command('audio:cleanup-generated --days=7')
 Schedule::call(fn () => app(QueueService::class)->expireStalePrintReservations())
     ->name('expire-stale-kiosk-print-reservations')
     ->everyMinute()
+    ->withoutOverlapping();
+
+Schedule::call(fn () => app(OnlineQueueService::class)->expireNoShows())
+    ->name('expire-online-queue-no-shows')
+    ->everyFiveMinutes()
+    ->timezone('Asia/Jakarta')
     ->withoutOverlapping();
