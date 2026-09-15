@@ -27,8 +27,8 @@
         </select>
         <select wire:model.live="reservationServiceId" aria-label="Layanan">
             <option value="">Semua layanan</option>
-            @foreach (\App\Models\Service::query()->where('is_active', true)->where('is_archived', false)->orderBy('name')->get() as $service)
-                <option value="{{ $service->id }}">{{ $service->name }}</option>
+            @foreach ($this->serviceOptions as $serviceId => $serviceLabel)
+                <option value="{{ $serviceId }}">{{ $serviceLabel }}</option>
             @endforeach
         </select>
         <input type="search" wire:model.live.debounce.400ms="reservationSearch" placeholder="Cari kode, nama, atau WhatsApp">

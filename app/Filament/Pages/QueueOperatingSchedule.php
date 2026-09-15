@@ -9,6 +9,7 @@ use App\Models\Holiday;
 use App\Models\QueueOperatingSetting;
 use App\Models\Service;
 use App\Models\ServiceQueueDateOverride;
+use App\Services\KioskOperationalMessageService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -39,6 +40,8 @@ class QueueOperatingSchedule extends Page
     public ?string $serviceClosureDate = null;
     public ?int $serviceClosureServiceId = null;
     public ?string $serviceClosureReason = null;
+    /** @var array<string, array{title: string, body: string, footer: string}> */
+    public array $kioskMessages = [];
 
     public static function canAccess(): bool
     {
@@ -69,7 +72,7 @@ class QueueOperatingSchedule extends Page
 
     public function selectTab(string $tab): void
     {
-        if (in_array($tab, ['mingguan', 'cutoff', 'loket', 'tanggal_khusus', 'log'], true)) {
+        if (in_array($tab, ['mingguan', 'cutoff', 'loket', 'tanggal_khusus', 'pesan_kiosk', 'log'], true)) {
             $this->activeTab = $tab;
         }
     }
@@ -128,6 +131,29 @@ class QueueOperatingSchedule extends Page
             ]);
 
         Notification::make()->title('Perubahan jadwal tersimpan.')->success()->send();
+    }
+
+    public function saveKioskMessages(): void
+    {
+        $this->validate([
+            'kioskMessages.*.title' => ['required', 'string', 'max:100'],
+            'kioskMessages.*.body' => ['required', 'string', 'max:300'],
+            'kioskMessages.*.footer' => ['required', 'string', 'max:200'],
+        ]);
+
+        $allowedPlaceholders = ['{jam_buka}', '{hari_buka}', '{tanggal_buka}'];
+        foreach ($this->kioskMessages as $message) {
+            preg_match_all('/\{[^}]+\}/', implode(' ', $message), $matches);
+            if (array_diff($matches[0], $allowedPlaceholders)) {
+                Notification::make()->title('Placeholder pesan tidak dikenal.')->body('Gunakan hanya {jam_buka}, {hari_buka}, atau {tanggal_buka}.')->danger()->send();
+                return;
+            }
+        }
+
+        QueueOperatingSetting::query()->firstOrCreate([], ['weekly_schedule' => $this->defaultSchedule()])
+            ->update(['kiosk_messages' => $this->kioskMessages]);
+
+        Notification::make()->title('Pesan operasional kiosk tersimpan.')->success()->send();
     }
 
     public function saveCounterOverride(): void
@@ -243,6 +269,10 @@ class QueueOperatingSchedule extends Page
         $this->weeklySchedule = $this->normaliseSchedule((array) $setting->weekly_schedule);
         $this->cutoffMinutes = (int) $setting->cutoff_minutes;
         $this->defaultDailyQuota = $setting->default_daily_quota;
+        $storedMessages = (array) $setting->kiosk_messages;
+        $this->kioskMessages = collect(KioskOperationalMessageService::defaults())
+            ->map(fn (array $defaults, string $state): array => array_merge($defaults, (array) ($storedMessages[$state] ?? [])))
+            ->all();
     }
 
     private function loadCounterOverride(): void

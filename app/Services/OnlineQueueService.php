@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Models\Holiday;
-use App\Models\OnlineQueueReservation;
 use App\Models\OnlineQueueAudit;
+use App\Models\OnlineQueueReservation;
 use App\Models\OnlineQueueSession;
 use App\Models\OnlineQueueSetting;
 use App\Models\Queue;
@@ -74,7 +74,9 @@ class OnlineQueueService
                 }
 
                 $nikHash = $this->nikHash($nik);
-                $identityKey = hash('sha256', $service->id.'|'.$date->toDateString().'|'.$nikHash);
+                // Satu NIK hanya boleh mempunyai satu reservasi aktif per tanggal,
+                // meskipun mencoba layanan yang berbeda.
+                $identityKey = hash('sha256', $date->toDateString().'|'.$nikHash);
 
                 return OnlineQueueReservation::create([
                     'online_queue_session_id' => $lockedSession->id,
@@ -93,7 +95,7 @@ class OnlineQueueService
             });
         } catch (QueryException $exception) {
             if (in_array((string) $exception->getCode(), ['23000', '19'], true)) {
-                throw ValidationException::withMessages(['nik' => 'NIK ini sudah mempunyai reservasi aktif pada layanan dan tanggal yang sama.']);
+                throw ValidationException::withMessages(['nik' => 'Data ini sudah mempunyai reservasi aktif pada tanggal yang sama.']);
             }
             throw $exception;
         }

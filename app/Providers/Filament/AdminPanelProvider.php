@@ -34,8 +34,12 @@ class AdminPanelProvider extends PanelProvider
             ->brandName($branding['name'])
             ->brandLogo($branding['logo_url'])
             ->favicon(asset('images/siola-q-icon-32.png'))
-            // Besarkan logo di header, tetapi tetap dibatasi agar sidebar tidak melebar.
-            ->brandLogoHeight('5rem')
+            // Ukuran logo utama dapat diatur dari Identitas & Branding MPP.
+            ->brandLogoHeight(match ($branding['image_size']) {
+                'small' => '4rem',
+                'large' => '6rem',
+                default => '5rem',
+            })
             ->colors([
                 'primary' => Color::Blue,
             ])

@@ -29,7 +29,8 @@ class AnnouncementApiTest extends TestCase
             ->assertOk()
             ->assertJsonStructure(['announcementId'])
             ->assertJsonPath('queueId', $queue->id)
-            ->assertJsonPath('queueNumber', 'A-001');
+            ->assertJsonPath('queueNumber', 'A-001')
+            ->assertJsonPath('useInstitutionAnnouncement', false);
 
         $this->getJson('/api/announcements/latest')
             ->assertOk()
@@ -163,10 +164,46 @@ class AnnouncementApiTest extends TestCase
             ->assertJsonPath('queueId', $zoneQueue->id);
     }
 
-    private function createServiceAndCounter(string $zone = 'ZONA TEST', string $prefix = 'A'): array
+    public function test_zone_four_announcement_includes_institution_name_for_speech(): void
+    {
+        [$service, $counter] = $this->createServiceAndCounter('ZONA 4', '4A', 'BPJS Kesehatan');
+        Queue::query()->create([
+            'service_id' => $service->id,
+            'counter_id' => $counter->id,
+            'number' => '4A-001',
+            'status' => Queue::STATUS_CALLED,
+            'called_at' => now(),
+        ]);
+
+        $this->getJson('/api/announcements/latest')
+            ->assertOk()
+            ->assertJsonPath('institutionName', 'BPJS Kesehatan')
+            ->assertJsonPath('useInstitutionAnnouncement', true);
+    }
+
+    public function test_pengadilan_agama_announcement_uses_institution_name(): void
+    {
+        [$service, $counter] = $this->createServiceAndCounter('ZONA 4', '4E', 'Pengadilan Agama');
+        $counter->update(['code_loket' => '4e9']);
+        Queue::query()->create([
+            'service_id' => $service->id,
+            'counter_id' => $counter->id,
+            'number' => '4E-001',
+            'status' => Queue::STATUS_CALLED,
+            'called_at' => now(),
+        ]);
+
+        $this->getJson('/api/announcements/latest')
+            ->assertOk()
+            ->assertJsonPath('counterName', 'Loket 4e9')
+            ->assertJsonPath('institutionName', 'Pengadilan Agama')
+            ->assertJsonPath('useInstitutionAnnouncement', true);
+    }
+
+    private function createServiceAndCounter(string $zone = 'ZONA TEST', string $prefix = 'A', ?string $institutionName = null): array
     {
         $instansi = Instansi::query()->create([
-            'nama_instansi' => 'INSTANSI '.$zone,
+            'nama_instansi' => $institutionName ?? 'INSTANSI '.$zone,
             'zone' => $zone,
             'is_active' => true,
             'is_archived' => false,

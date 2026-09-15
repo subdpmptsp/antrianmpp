@@ -10,8 +10,9 @@ use App\Http\Controllers\AudioController;
 use App\Http\Controllers\BarcodeController;
 use App\Http\Controllers\DashboardMppController;
 use App\Http\Controllers\ExportController;
-use App\Http\Controllers\OnlineQueuePublicController;
+use App\Http\Controllers\MonitoringReportPdfController;
 use App\Http\Controllers\OnlineQueueCheckinController;
+use App\Http\Controllers\OnlineQueuePublicController;
 use App\Http\Controllers\PublicQueueKioskController;
 use App\Http\Controllers\PublicWaitingRoomTvController;
 use App\Http\Controllers\QueuePrintController;
@@ -43,7 +44,8 @@ Route::view('/kiosk/check-in-online-preview', 'online-queue.kiosk-checkin-previe
     ->name('online-queue.preview.kiosk');
 
 Route::get('/antrean-online', [OnlineQueuePublicController::class, 'index'])->name('online-queue.index');
-Route::post('/antrean-online', [OnlineQueuePublicController::class, 'store'])->middleware('throttle:15,1')->name('online-queue.store');
+Route::get('/antrean-online/daftar', [OnlineQueuePublicController::class, 'registration'])->name('online-queue.registration');
+Route::post('/antrean-online', [OnlineQueuePublicController::class, 'store'])->middleware('throttle:10,1')->name('online-queue.store');
 Route::get('/antrean-online/tiket/{token}', [OnlineQueuePublicController::class, 'ticket'])->name('online-queue.ticket');
 Route::post('/antrean-online/tiket/{token}/batal', [OnlineQueuePublicController::class, 'cancel'])->middleware('throttle:10,1')->name('online-queue.cancel');
 Route::get('/antrean-online/tiket/{token}/kalender', [OnlineQueuePublicController::class, 'calendar'])->name('online-queue.calendar');
@@ -59,12 +61,20 @@ Route::middleware(['auth', 'admin'])
     ->name('export.rekap-layanan');
 
 Route::middleware(['auth', 'admin'])
+    ->get('/preview/rekap-layanan.pdf', MonitoringReportPdfController::class)
+    ->name('preview.rekap-layanan-pdf');
+
+Route::middleware(['auth', 'admin'])
     ->get('/exports/antrean-online', [ExportController::class, 'onlineQueueReservations'])
     ->name('export.online-queue-reservations');
 
 Route::middleware(['auth', 'admin'])
     ->get('/exports/rekap-kanal-antrean', [ExportController::class, 'queueChannelRecap'])
     ->name('export.queue-channel-recap');
+
+Route::middleware(['auth', 'admin'])
+    ->get('/preview/rekap-kanal-antrean.pdf', [ExportController::class, 'queueChannelRecapPdf'])
+    ->name('preview.queue-channel-recap-pdf');
 
 Route::middleware(['auth', 'admin'])->get('/exports/monitoring-realtime', function (Request $request) {
     return Excel::download(

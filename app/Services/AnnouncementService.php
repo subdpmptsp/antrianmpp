@@ -46,10 +46,24 @@ class AnnouncementService
             'queueNumber' => $queue->number,
             'serviceName' => $queue->service?->name ?? 'Layanan',
             'counterName' => $queue->counter?->display_name ?? 'Loket',
+            'institutionName' => $queue->counter?->instansi?->nama_instansi,
+            'useInstitutionAnnouncement' => $this->usesInstitutionAnnouncement($queue->counter),
             'zona' => $queue->counter?->instansi?->nama_instansi ?? 'Zona',
             'calledAt' => $queue->called_at->format('H:i:s'),
             'calledAtIso' => $queue->called_at->toIso8601String(),
         ];
+    }
+
+    private function usesInstitutionAnnouncement(?Counter $counter): bool
+    {
+        if (! $counter) {
+            return false;
+        }
+
+        $zone = mb_strtolower(trim((string) ($counter->instansi?->zone ?? '')));
+        $code = mb_strtolower(trim((string) $counter->code_loket));
+
+        return str_contains($zone, 'zona 4') || preg_match('/^4k(?:-|\d|$)/', $code) === 1;
     }
 
     private function scopeToZone(Builder $query, ?int $zoneId): void

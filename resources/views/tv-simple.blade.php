@@ -338,7 +338,6 @@
             // Audio dibuat ringkas: nama instansi Dispendukcapil tidak
             // disebut karena terlalu panjang. IKD dibaca fonetik agar
             // suara browser tidak menghilangkan huruf D.
-            const isDisdukcapil = /dinas kependudukan dan pencatatan sipil/i.test(String(data.zona || ''));
             const serviceNameForSpeech = String(data.serviceName || 'Layanan')
                 .toLowerCase()
                 .replace(/\bikd\b/gi, 'i ka de')
@@ -347,22 +346,25 @@
                 .replace(/-/g, ', ');
             const counterName = String(data.counterName || 'Loket');
             const zoneOneCounter = counterName.match(/^Loket\s+Z1-(\d{2})$/i);
+            const standardCounter = counterName.match(/^Loket\s+(\d+)([a-z])(\d+)$/i);
+            const counterNumberWords = {
+                0: 'nol', 1: 'satu', 2: 'dua', 3: 'tiga', 4: 'empat', 5: 'lima',
+                6: 'enam', 7: 'tujuh', 8: 'delapan', 9: 'sembilan', 10: 'sepuluh',
+            };
+            const counterLetterWords = { a: 'a', b: 'be', c: 'ce', d: 'de', e: 'e' };
             const counterNameForSpeech = zoneOneCounter
                 ? `loket ${Number(zoneOneCounter[1])}`
-                : counterName;
-            let instansiText = '';
+                : (standardCounter
+                    ? `loket ${counterNumberWords[Number(standardCounter[1])] || Number(standardCounter[1])} ${counterLetterWords[standardCounter[2].toLowerCase()] || standardCounter[2]} ${counterNumberWords[Number(standardCounter[3])] || Number(standardCounter[3])}`
+                    : counterName);
+            const institutionName = String(data.institutionName || '').trim()
+                .replace(/\bBPJS\b/gi, 'B P J S');
+            const useInstitutionAnnouncement = data.useInstitutionAnnouncement === true
+                && institutionName !== '';
 
-            if (!isDisdukcapil) {
-                instansiText = data.zona.toUpperCase() === 'UPTSP'
-                    ? 'U-P-T-S-P'
-                    : data.zona.toLowerCase();
-            }
-
-            const announcementText = [
-                `nomor antrean ${queueNumberForSpeech}`,
-                `silakan menuju ${counterNameForSpeech}`,
-                `untuk layanan ${serviceNameForSpeech}`,
-            ].filter(Boolean).join(', ')
+            const announcementText = (useInstitutionAnnouncement
+                ? `nomor antrean ${queueNumberForSpeech}, silakan menuju ${counterNameForSpeech}, ${institutionName}`
+                : `nomor antrean ${queueNumberForSpeech}, silakan menuju ${counterNameForSpeech}, untuk layanan ${serviceNameForSpeech}`)
                 .replace(/\bIKD\b/gi, 'I K D')
                 .replace(/\bYOB\b/gi, 'Y O B')
                 .replace(/\bKTP-el\b/gi, 'E KTP');

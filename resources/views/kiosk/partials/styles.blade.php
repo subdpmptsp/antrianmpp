@@ -28,6 +28,12 @@
     .queue-kiosk__logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
     .queue-kiosk__logo--city { width: 68px; height: 68px; }
     .queue-kiosk__logo--office { width: 76px; height: 76px; padding: 7px; border-radius: 18px; background: #fff; }
+    .queue-kiosk__logo--small.queue-kiosk__logo--city { width: 56px; height: 56px; }
+    .queue-kiosk__logo--medium.queue-kiosk__logo--city { width: 68px; height: 68px; }
+    .queue-kiosk__logo--large.queue-kiosk__logo--city { width: 80px; height: 80px; }
+    .queue-kiosk__logo--small.queue-kiosk__logo--office { width: 64px; height: 64px; }
+    .queue-kiosk__logo--medium.queue-kiosk__logo--office { width: 76px; height: 76px; }
+    .queue-kiosk__logo--large.queue-kiosk__logo--office { width: 88px; height: 88px; }
     .queue-kiosk__clock { min-width: 110px; text-align: right; }
     .queue-kiosk__clock strong { display: block; font-size: 28px; font-variant-numeric: tabular-nums; }
     .queue-kiosk__clock span { display: block; margin-top: 3px; color: #c8e0f4; font-size: 11px; }

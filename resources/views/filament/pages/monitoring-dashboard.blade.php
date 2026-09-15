@@ -327,13 +327,10 @@
             </div>
         @else
             <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
-                <div class="grid gap-5 lg:grid-cols-[1fr_1fr_auto] lg:items-end"><div>{{ $this->form }}</div><div><label class="mb-2 block text-sm font-medium text-gray-600 dark:text-gray-300">Zona rekap <span class="text-danger-600">*</span></label><select wire:model="reportZoneFilter" class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900"><option value="">Pilih zona terlebih dahulu</option><option value="all">Semua Zona (Rekap Gabungan)</option>@foreach ($zoneOptions as $id => $name)<option value="{{ $id }}">{{ $name }}</option>@endforeach</select></div><div class="flex flex-wrap gap-2"><x-filament::button wire:click="applyReportFilters" icon="heroicon-o-funnel">Terapkan Rekap</x-filament::button><x-filament::button wire:click="exportExcel" color="success" icon="heroicon-o-arrow-down-tray" title="{{ $this->exportDescription() }}">Export Excel</x-filament::button></div></div>
+                <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div class="w-full max-w-2xl">{{ $this->form }}</div><div class="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:min-w-[22rem]"><x-filament::button wire:click="exportExcel" color="success" icon="heroicon-o-arrow-down-tray" title="{{ $this->exportDescription() }}">Export Excel</x-filament::button><x-filament::button tag="a" :href="$this->previewPdfUrl()" target="_blank" rel="noopener" color="danger" icon="heroicon-o-document-text" title="Buka pratinjau PDF di tab baru">Preview PDF</x-filament::button></div></div>
                 <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">{{ $this->exportDescription() }}</p>
             </div>
-            @if (! $reportZoneFilter)
-                <div class="rounded-xl bg-white px-5 py-12 text-center text-sm text-gray-500 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">Pilih zona terlebih dahulu. Rekap rinci belum dihitung agar halaman tetap cepat.</div>
-            @else
-                <div class="overflow-x-auto rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
+            <div class="overflow-x-auto rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
                     <table class="w-full text-sm">
                         <thead class="bg-gray-50 text-xs uppercase text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                             <tr><th class="px-4 py-3 text-left">Instansi / Layanan</th><th class="px-4 py-3 text-center">Jumlah Pemohon</th></tr>
@@ -355,8 +352,7 @@
                             @endforelse
                         </tbody>
                     </table>
-                </div>
-            @endif
+            </div>
         @endif
     </div>
 </x-filament-panels::page>

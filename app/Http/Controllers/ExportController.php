@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Exports\OnlineQueueReservationsExport;
 use App\Exports\QueueChannelRecapExport;
-use Illuminate\Http\Request;
 use App\Exports\RekapLayananExport;
 use App\Models\AntrianSkck;
+use App\Models\Service;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ExportController extends Controller
@@ -48,6 +50,30 @@ class ExportController extends Controller
         );
     }
 
+    public function queueChannelRecapPdf(Request $request)
+    {
+        $data = $request->validate([
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+            'service_id' => ['nullable', 'integer', 'exists:services,id'],
+        ]);
+        $from = $data['from'] ?? now('Asia/Jakarta')->startOfMonth()->toDateString();
+        $to = $data['to'] ?? now('Asia/Jakarta')->toDateString();
+        $serviceId = $request->integer('service_id') ?: null;
+        $serviceName = $serviceId ? Service::query()->find($serviceId)?->name : null;
+        $rows = (new QueueChannelRecapExport($from, $to, $serviceId))->collection();
+
+        return Pdf::loadView('pdf.queue-channel-recap', [
+            'from' => Carbon::parse($from, 'Asia/Jakarta'),
+            'to' => Carbon::parse($to, 'Asia/Jakarta'),
+            'serviceName' => $serviceName,
+            'rows' => $rows,
+            'generatedAt' => now('Asia/Jakarta'),
+        ])
+            ->setPaper('a4', 'landscape')
+            ->stream('rekap-kanal-antrean-'.$from.'-sd-'.$to.'.pdf', ['Attachment' => false]);
+    }
+
     private $bulan = [
         1 => 'Januari',
         2 => 'Februari',
@@ -66,7 +92,7 @@ class ExportController extends Controller
     public function rekapLayanan(Request $request)
     {
         $from = $request->query('from', now()->toDateString());
-        $to   = $request->query('to', now()->toDateString());
+        $to = $request->query('to', now()->toDateString());
         $zoneId = $request->string('zone_id')->toString() ?: null;
 
         $fileName = "rekap_layanan_{$from}_sd_{$to}".($zoneId && $zoneId !== 'all' ? "_zona_{$zoneId}" : '').'.xlsx';
@@ -80,7 +106,9 @@ class ExportController extends Controller
 
         $antrianSkck = AntrianSkck::find($id);
 
-        if ($antrianSkck == null) abort(404);
+        if ($antrianSkck == null) {
+            abort(404);
+        }
 
         $logo = public_path('logo_pemkot.png');
 
@@ -89,16 +117,16 @@ class ExportController extends Controller
         $bulanAngka = date('n', strtotime($antrianSkck->created_at));
         $tahun = date('Y', strtotime($antrianSkck->created_at));
 
-        $format = $tanggal . ' ' . $this->bulan[$bulanAngka] . ' ' . $tahun;
+        $format = $tanggal.' '.$this->bulan[$bulanAngka].' '.$tahun;
         $pdf = Pdf::loadView('antrian-skck', [
             'logo' => $logoBase64,
             'nomor' => str_pad($antrianSkck->antrian, 3, '0', STR_PAD_LEFT),
             'tanggal' => $format,
-            'nama' => $antrianSkck->nama
+            'nama' => $antrianSkck->nama,
         ]);
 
         $customPaper = [0, 0, 360, 360];
 
-        return $pdf->setPaper($customPaper)->stream($id . '.pdf');
+        return $pdf->setPaper($customPaper)->stream($id.'.pdf');
     }
 }

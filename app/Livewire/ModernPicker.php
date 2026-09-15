@@ -2,10 +2,8 @@
 
 namespace App\Livewire;
 
-use App\Support\TimeOptions;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
@@ -31,14 +29,9 @@ class ModernPicker extends Component implements HasForms
     public function form(Form $form): Form
     {
         $field = match ($this->type) {
-            'time' => Select::make('value')
-                ->options(TimeOptions::everyFiveMinutes())
-                ->searchable()
-                ->searchPrompt('Cari jam, contoh 07:30')
-                ->searchingMessage('Mencari pilihan jam...')
-                ->noSearchResultsMessage('Jam tidak ditemukan')
-                ->native(false)
-                ->placeholder('Pilih jam'),
+            // Waktu dirender oleh view sebagai dua daftar gulir (jam dan menit).
+            // Jangan gunakan Select berisi 288 pilihan karena sulit dipindai admin.
+            'time' => null,
             'datetime' => DateTimePicker::make('value')
                 ->seconds(false)
                 ->minutesStep(5)
@@ -50,11 +43,13 @@ class ModernPicker extends Component implements HasForms
                 ->closeOnDateSelection(),
         };
 
-        $field
-            ->label($this->label ?: null)
-            ->hiddenLabel(blank($this->label))
-            ->disabled($this->disabled)
-            ->live();
+        if ($field) {
+            $field
+                ->label($this->label ?: null)
+                ->hiddenLabel(blank($this->label))
+                ->disabled($this->disabled)
+                ->live();
+        }
 
         if ($field instanceof DatePicker) {
             $field
@@ -62,7 +57,7 @@ class ModernPicker extends Component implements HasForms
                 ->minDate($this->min);
         }
 
-        return $form->schema([$field]);
+        return $form->schema($field ? [$field] : []);
     }
 
     public function render(): View

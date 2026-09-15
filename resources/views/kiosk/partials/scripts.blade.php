@@ -175,11 +175,12 @@
         if (breakModal) {
             const countdown = breakModal.querySelector('[data-kiosk-break-countdown]')
             const reopenAt = new Date(breakModal.dataset.kioskBreakUntil)
+            const countdownLabel = breakModal.dataset.kioskCountdownLabel || 'Buka kembali dalam'
             const updateBreakCountdown = () => {
                 const seconds = Math.max(0, Math.ceil((reopenAt.getTime() - Date.now()) / 1000))
                 if (countdown) {
                     countdown.textContent = seconds > 0
-                        ? `Buka kembali dalam ${String(Math.floor(seconds / 3600)).padStart(2, '0')}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+                        ? `${countdownLabel} ${String(Math.floor(seconds / 3600)).padStart(2, '0')}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
                         : 'Memuat kembali layanan…'
                 }
                 if (seconds <= 0) {

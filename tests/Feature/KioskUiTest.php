@@ -11,12 +11,14 @@ use App\Models\OnlineQueueCheckinChallenge;
 use App\Models\OnlineQueueSession;
 use App\Models\OnlineQueueSetting;
 use App\Models\Service;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\KioskCatalogService;
 use App\Services\ServiceQueueAvailabilityService;
 use Database\Seeders\TestingSeeder;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -56,6 +58,29 @@ class KioskUiTest extends TestCase
             ->assertSee(route('public.queue-kiosk', ['online_checkin' => 1]), false)
             ->assertDontSee('Pilih area layanan')
             ->assertDontSee('Konfirmasi pilihan');
+    }
+
+    public function test_kiosk_uses_configured_header_logos_and_sizes(): void
+    {
+        Storage::fake('public');
+
+        Setting::query()->create([
+            'name' => 'MPP Uji',
+            'address' => 'Surabaya',
+            'phone' => '031-0000000',
+            'image' => 'branding/logo-utama/default.png',
+            'kiosk_logo' => 'branding/kiosk/utama.png',
+            'kiosk_logo_size' => 'large',
+            'kiosk_office_logo' => 'branding/kiosk/pendamping.png',
+            'kiosk_office_logo_size' => 'small',
+        ]);
+
+        $this->get(route('public.queue-kiosk'))
+            ->assertOk()
+            ->assertSee('/storage/branding/kiosk/utama.png', false)
+            ->assertSee('/storage/branding/kiosk/pendamping.png', false)
+            ->assertSee('queue-kiosk__logo--large', false)
+            ->assertSee('queue-kiosk__logo--small', false);
     }
 
     public function test_online_checkin_stays_inside_kiosk_shell_and_can_return_home(): void
@@ -180,6 +205,38 @@ class KioskUiTest extends TestCase
                 ->assertSee('Pengambilan nomor antrean untuk hari ini telah ditutup.')
                 ->assertSee('Sabtu · pukul 07.00 WIB')
                 ->assertSee('data-kiosk-operational-closure', false);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_kiosk_shows_editable_fullscreen_message_before_opening_time(): void
+    {
+        $this->createInstitutionWithService();
+        QueueOperatingSetting::query()->update([
+            'weekly_schedule' => collect(range(1, 7))->map(fn (int $day) => [
+                'day' => $day,
+                'is_open' => true,
+                'opens_at' => '07:30',
+                'closes_at' => '16:00',
+            ])->all(),
+            'cutoff_minutes' => 0,
+            'kiosk_messages' => [
+                'pre_opening' => [
+                    'title' => 'Mohon Menunggu',
+                    'body' => 'Antrean dimulai pukul {jam_buka} WIB.',
+                    'footer' => 'Terima kasih.',
+                ],
+            ],
+        ]);
+        Carbon::setTestNow(Carbon::parse('2026-09-15 07:00:00', 'Asia/Jakarta'));
+
+        try {
+            $this->get(route('public.queue-kiosk'))
+                ->assertOk()
+                ->assertSee('Mohon Menunggu')
+                ->assertSee('Antrean dimulai pukul 07.30 WIB.')
+                ->assertSee('data-kiosk-break-until', false);
         } finally {
             Carbon::setTestNow();
         }

@@ -2,20 +2,22 @@
 
 namespace Tests\Feature;
 
-use App\Models\OnlineQueueReservation;
 use App\Models\OnlineQueueAudit;
 use App\Models\OnlineQueueCheckinChallenge;
+use App\Models\OnlineQueueReservation;
 use App\Models\OnlineQueueSession;
 use App\Models\OnlineQueueSetting;
 use App\Models\Queue;
 use App\Models\QueueOperatingSetting;
 use App\Models\Service;
-use App\Services\OnlineQueueService;
 use App\Services\OnlineQueueScheduleService;
+use App\Services\OnlineQueueService;
 use Carbon\Carbon;
 use Database\Seeders\TestingSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -26,6 +28,7 @@ class OnlineQueueLifecycleTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Config::set('turnstile.enabled', false);
         Carbon::setTestNow(Carbon::parse('2026-09-14 08:30:00', 'Asia/Jakarta'));
         $this->seed(TestingSeeder::class);
         OnlineQueueSetting::query()->create([
@@ -65,6 +68,26 @@ class OnlineQueueLifecycleTest extends TestCase
 
         $this->expectException(ValidationException::class);
         $this->book($session, '3578123412345678');
+    }
+
+    public function test_one_nik_cannot_hold_active_reservations_for_different_services_on_same_date(): void
+    {
+        $first = $this->createOnlineSession(quota: 2);
+        $second = OnlineQueueSession::query()->create([
+            'service_id' => 1002,
+            'day_of_week' => 1,
+            'starts_at' => '09:00',
+            'ends_at' => '10:00',
+            'quota' => 2,
+            'checkin_open_minutes' => 15,
+            'checkin_grace_minutes' => 15,
+            'status' => OnlineQueueSession::STATUS_ACTIVE,
+        ]);
+
+        $this->book($first, '3578123412341234');
+
+        $this->expectException(ValidationException::class);
+        $this->book($second, '3578123412341234');
     }
 
     public function test_pilot_scope_rejects_service_outside_allowlist(): void
@@ -169,7 +192,16 @@ class OnlineQueueLifecycleTest extends TestCase
     {
         $onlineSession = $this->createOnlineSession(quota: 2);
 
-        $this->get(route('online-queue.index'))->assertOk()->assertSee('Layanan Uji ZONA 1')->assertSee('sisa 2');
+        $this->get(route('online-queue.index'))
+            ->assertOk()
+            ->assertSee('Ambil antrean')
+            ->assertSee('sebelum datang ke')
+            ->assertSee('MPP Siola')
+            ->assertSee('Layanan Uji ZONA 1');
+        $this->get(route('online-queue.registration'))
+            ->assertOk()
+            ->assertSee('Layanan Uji ZONA 1')
+            ->assertSee('sisa 2');
 
         $response = $this->post(route('online-queue.store'), [
             'nik' => '3578123412341234', 'name' => 'Pemohon Publik', 'phone' => '081234567890',
@@ -188,6 +220,47 @@ class OnlineQueueLifecycleTest extends TestCase
             ->assertRedirect(route('online-queue.ticket', $reservation->access_token));
         $this->assertSame(OnlineQueueReservation::STATUS_CANCELED, $reservation->fresh()->status);
         $this->assertNull($reservation->fresh()->active_identity_key);
+    }
+
+    public function test_public_booking_requires_and_validates_turnstile_when_enabled(): void
+    {
+        Config::set('turnstile.enabled', true);
+        Config::set('turnstile.turnstile_site_key', 'site-key-for-test');
+        Config::set('turnstile.turnstile_secret_key', 'secret-key-for-test');
+        Config::set('turnstile.booking_action', 'online_queue_booking');
+        Http::fake([
+            'https://challenges.cloudflare.com/turnstile/v0/siteverify' => Http::response([
+                'success' => true,
+                'action' => 'online_queue_booking',
+                'hostname' => 'localhost',
+            ]),
+        ]);
+        $onlineSession = $this->createOnlineSession(quota: 2);
+
+        $this->get(route('online-queue.registration'))
+            ->assertOk()
+            ->assertSee('site-key-for-test', false)
+            ->assertSee('online_queue_booking', false);
+
+        $this->post(route('online-queue.store'), [
+            'nik' => '3578123412341234',
+            'name' => 'Pemohon Publik',
+            'phone' => '081234567890',
+            'slot' => $onlineSession->id.'|2026-09-14',
+            'agreement' => '1',
+        ])->assertSessionHasErrors('cf-turnstile-response');
+
+        $this->post(route('online-queue.store'), [
+            'nik' => '3578123412341234',
+            'name' => 'Pemohon Publik',
+            'phone' => '081234567890',
+            'slot' => $onlineSession->id.'|2026-09-14',
+            'agreement' => '1',
+            'cf-turnstile-response' => 'valid-test-token',
+        ])->assertRedirect();
+
+        Http::assertSent(fn ($request): bool => $request['secret'] === 'secret-key-for-test'
+            && $request['response'] === 'valid-test-token');
     }
 
     public function test_short_lived_kiosk_qr_checks_in_once_and_returns_print_payload(): void

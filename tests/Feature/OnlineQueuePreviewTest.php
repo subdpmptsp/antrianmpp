@@ -2,15 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Exports\OnlineQueueReservationsExport;
+use App\Exports\QueueChannelRecapExport;
 use App\Filament\Pages\OnlineQueuePreview;
 use App\Livewire\OnlineQueueParticipantTable;
-use App\Models\User;
-use App\Models\Queue;
 use App\Models\OnlineQueueReservation;
 use App\Models\OnlineQueueSession;
 use App\Models\OnlineQueueSetting;
-use App\Exports\QueueChannelRecapExport;
-use App\Exports\OnlineQueueReservationsExport;
+use App\Models\Queue;
+use App\Models\User;
 use Carbon\Carbon;
 use Database\Seeders\TestingSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -27,6 +27,7 @@ class OnlineQueuePreviewTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Config::set('turnstile.enabled', false);
         $this->seed(TestingSeeder::class);
     }
 
@@ -39,6 +40,8 @@ class OnlineQueuePreviewTest extends TestCase
             ->assertOk()
             ->assertSee('Satu pusat kendali untuk antrean online')
             ->assertSee('Layanan Harian')
+            ->assertSee('/admin/integrasi-eksternal', false)
+            ->assertSee('target="_blank"', false)
             ->assertDontSee('Event Khusus');
 
         Livewire::actingAs($admin)->test(OnlineQueuePreview::class)
@@ -76,6 +79,32 @@ class OnlineQueuePreviewTest extends TestCase
                 ->assertActionMounted('exportChannelRecap')
                 ->call('unmountAction');
         }
+    }
+
+    public function test_pilot_options_show_institution_service_and_code_and_can_stay_empty_when_inactive(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $component = Livewire::actingAs($admin)->test(OnlineQueuePreview::class);
+        $options = $component->instance()->pilotServiceOptions();
+
+        $this->assertSame(
+            'Instansi Uji ZONA 1 · Layanan Uji ZONA 1 · Kode antrean 1A · Loket TEST-5',
+            $options['Instansi Uji ZONA 1'][1001],
+        );
+
+        $component->mountAction('configurePilot')
+            ->setActionData([
+                'pilot_service_ids' => [],
+                'booking_window_days' => 7,
+                'activate' => false,
+            ])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $settings = OnlineQueueSetting::current()->fresh();
+        $this->assertSame([], $settings->pilot_service_ids);
+        $this->assertFalse($settings->global_enabled);
+        $this->assertFalse($settings->regular_enabled);
     }
 
     public function test_daily_service_screen_explains_weekly_and_special_schedules(): void
@@ -269,6 +298,7 @@ class OnlineQueuePreviewTest extends TestCase
     public function test_channel_recap_separates_onsite_online_canceled_and_no_show(): void
     {
         $date = Carbon::parse('2026-09-10', 'Asia/Jakarta');
+        Carbon::setTestNow($date);
         $serviceId = 1001;
         Queue::query()->create(['service_id' => $serviceId, 'number' => '1A-001', 'status' => Queue::STATUS_WAITING, 'source' => 'kiosk', 'created_at' => $date, 'updated_at' => $date]);
         Queue::query()->create(['service_id' => $serviceId, 'number' => '1A-002', 'status' => Queue::STATUS_WAITING, 'source' => 'online', 'created_at' => $date, 'updated_at' => $date]);

@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Models\OnlineQueueReservation;
+use App\Models\Service;
 use App\Services\OnlineQueueService;
 use Filament\Forms;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -28,6 +29,25 @@ class OnlineQueueParticipantTable extends Component implements HasForms, HasTabl
     public string $reservationSearch = '';
 
     public string $reservationServiceId = '';
+
+    /** @return array<int, string> */
+    public function getServiceOptionsProperty(): array
+    {
+        return Service::query()
+            ->with('instansi')
+            ->where('is_active', true)
+            ->where('is_archived', false)
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn (Service $service): array => [
+                $service->id => collect([
+                    $service->instansi?->nama_instansi,
+                    $service->name,
+                    $service->prefix,
+                ])->filter()->implode(' · '),
+            ])
+            ->all();
+    }
 
     public function updatedReservationDate(): void
     {

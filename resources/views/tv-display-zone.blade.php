@@ -331,7 +331,21 @@
                 .replace(/\bikd\b/gi, 'I K D')
                 .replace(/\byob\b/gi, 'Y O B')
                 .replace(/\bktp-el\b/gi, 'E KTP');
-            const announcementText = `nomor antrean ${data.queueNumber}, silakan menuju loket ${data.servicePrefix || 'A'} untuk layanan ${serviceText}`;
+            const institutionName = String(data.institutionName || '').trim()
+                .replace(/\bBPJS\b/gi, 'B P J S');
+            const counterName = String(data.counterName || 'loket tujuan');
+            const standardCounter = counterName.match(/^Loket\s+(\d+)([a-z])(\d+)$/i);
+            const counterNumberWords = {
+                0: 'nol', 1: 'satu', 2: 'dua', 3: 'tiga', 4: 'empat', 5: 'lima',
+                6: 'enam', 7: 'tujuh', 8: 'delapan', 9: 'sembilan', 10: 'sepuluh',
+            };
+            const counterLetterWords = { a: 'a', b: 'be', c: 'ce', d: 'de', e: 'e' };
+            const counterNameForSpeech = standardCounter
+                ? `loket ${counterNumberWords[Number(standardCounter[1])] || Number(standardCounter[1])} ${counterLetterWords[standardCounter[2].toLowerCase()] || standardCounter[2]} ${counterNumberWords[Number(standardCounter[3])] || Number(standardCounter[3])}`
+                : counterName;
+            const announcementText = data.useInstitutionAnnouncement === true && institutionName !== ''
+                ? `nomor antrean ${data.queueNumber}, silakan menuju ${counterNameForSpeech}, ${institutionName}`
+                : `nomor antrean ${data.queueNumber}, silakan menuju ${counterNameForSpeech}, untuk layanan ${serviceText}`;
             
             if (typeof responsiveVoice !== 'undefined') {
                 responsiveVoice.speak(announcementText, 'Indonesian Female', {

@@ -871,6 +871,7 @@
                 const zoneText = zone.toUpperCase() === 'UPTSP' ? 'U-P-T-S-P' : zone.toLowerCase()
                 const finalServiceName = serviceName.includes('layanan') ? serviceName : `layanan ${serviceName}`
                 const institutionName = String(data?.institutionName || '').trim()
+                    .replace(/\bBPJS\b/gi, 'B P J S')
                 const useInstitutionAnnouncement = data?.useInstitutionAnnouncement === true
                     && institutionName !== ''
                 const text = useInstitutionAnnouncement

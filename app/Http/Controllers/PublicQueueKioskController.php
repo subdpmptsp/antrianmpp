@@ -15,6 +15,8 @@ use App\Services\ServiceQueueAvailabilityService;
 use App\Services\OnlineQueueChannelPolicyService;
 use App\Services\FridayPrayerBreakService;
 use App\Services\KioskOperationalClosureService;
+use App\Services\KioskOperationalMessageService;
+use App\Services\KioskPreOpeningService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -42,14 +44,21 @@ class PublicQueueKioskController extends Controller
 
         $selectedInstansi = $request->integer('instansi') ?: null;
         $kioskBreak = app(FridayPrayerBreakService::class)->active();
-        $kioskOperationalClosure = $kioskBreak ? null : app(KioskOperationalClosureService::class)->active();
+        $kioskPreOpening = $kioskBreak ? null : app(KioskPreOpeningService::class)->active();
+        $kioskOperationalClosure = ($kioskBreak || $kioskPreOpening) ? null : app(KioskOperationalClosureService::class)->active();
+        $messageService = app(KioskOperationalMessageService::class);
+        $kioskOperationalMessage = $kioskBreak
+            ? $messageService->for('friday_break', $kioskBreak['ends_at'])
+            : ($kioskPreOpening
+                ? $messageService->for('pre_opening', $kioskPreOpening['opens_at'])
+                : ($kioskOperationalClosure ? $messageService->for('closed', $kioskOperationalClosure['opens_at']) : null));
         $showOnlineCheckin = ! $selectedInstansi && $request->boolean('online_checkin');
         $onlineCheckinEnabled = false;
         $onlineCheckinToken = null;
 
         if ($showOnlineCheckin) {
             $onlineSettings = OnlineQueueSetting::current();
-            $onlineCheckinEnabled = ! $kioskBreak && ! $kioskOperationalClosure && $this->hasActiveOnlineSession($onlineSettings);
+            $onlineCheckinEnabled = ! $kioskBreak && ! $kioskPreOpening && ! $kioskOperationalClosure && $this->hasActiveOnlineSession($onlineSettings);
 
             if ($onlineCheckinEnabled) {
                 $onlineCheckinToken = Str::random(64);
@@ -144,7 +153,9 @@ class PublicQueueKioskController extends Controller
             'onlineCheckinEnabled' => $onlineCheckinEnabled,
             'onlineCheckinToken' => $onlineCheckinToken,
             'kioskBreak' => $kioskBreak,
+            'kioskPreOpening' => $kioskPreOpening,
             'kioskOperationalClosure' => $kioskOperationalClosure,
+            'kioskOperationalMessage' => $kioskOperationalMessage,
             'services' => $services,
             'queueRequestToken' => $queueRequestToken,
         ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')

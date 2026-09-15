@@ -317,13 +317,17 @@
                     .replace(/\bIKD\b/gi, 'I K D')
                     .replace(/\bYOB\b/gi, 'Y O B')
                     .replace(/\bKTP-el\b/gi, 'E KTP')
+                const institutionName = String(data?.institutionName || '').trim()
+                    .replace(/\bBPJS\b/gi, 'B P J S')
                 const counterName = String(data?.counterName || 'Loket')
                 const zoneOneCounter = counterName.match(/^Loket\s+Z1-(\d{2})$/i)
                 const spokenCounter = zoneOneCounter
                     ? `loket ${Number(zoneOneCounter[1])}`
                     : `loket ${spellCode(counterName.replace(/^Loket\s+/i, '')) || 'tujuan'}`
 
-                return `Nomor antrean ${queueNumber}, silakan menuju ${spokenCounter} untuk layanan ${serviceName}`
+                return data?.useInstitutionAnnouncement === true && institutionName !== ''
+                    ? `Nomor antrean ${queueNumber}, silakan menuju ${spokenCounter}, ${institutionName}`
+                    : `Nomor antrean ${queueNumber}, silakan menuju ${spokenCounter} untuk layanan ${serviceName}`
             }
 
             const playOpeningAudio = () => new Promise((resolve, reject) => {

@@ -21,8 +21,8 @@
 >
     <header class="queue-kiosk__header">
         <div class="queue-kiosk__brand">
-            <div class="queue-kiosk__logo queue-kiosk__logo--city">
-                <img src="{{ $mppBranding['logo_url'] }}" alt="Logo {{ $mppBranding['name'] }}">
+            <div class="queue-kiosk__logo queue-kiosk__logo--city queue-kiosk__logo--{{ $mppBranding['kiosk_logo_size'] }}">
+                <img src="{{ $mppBranding['kiosk_logo_url'] }}" alt="Logo {{ $mppBranding['name'] }}">
             </div>
             <div class="queue-kiosk__brand-copy">
                 <span>Pemerintah Kota Surabaya</span>
@@ -39,8 +39,8 @@
             <button class="queue-kiosk__fullscreen" type="button" data-kiosk-fullscreen aria-label="Tampilkan layar penuh">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3m13 5h3a2 2 0 0 0 2-2v-3"/></svg>
             </button>
-            <div class="queue-kiosk__logo queue-kiosk__logo--office">
-                <img src="{{ asset('img/dpmptsp.png') }}" alt="Logo DPMPTSP Kota Surabaya">
+            <div class="queue-kiosk__logo queue-kiosk__logo--office queue-kiosk__logo--{{ $mppBranding['kiosk_office_logo_size'] }}">
+                <img src="{{ $mppBranding['kiosk_office_logo_url'] }}" alt="Logo instansi pendamping kiosk">
             </div>
         </div>
     </header>
@@ -386,15 +386,26 @@
     </div>
 
     @if ($kioskBreak ?? false)
-        <section class="queue-kiosk__break-modal" role="alertdialog" aria-modal="true" aria-labelledby="kiosk-break-title" data-kiosk-break-until="{{ $kioskBreak['ends_at']->toIso8601String() }}">
+        <section class="queue-kiosk__break-modal" role="alertdialog" aria-modal="true" aria-labelledby="kiosk-break-title" data-kiosk-break-until="{{ $kioskBreak['ends_at']->toIso8601String() }}" data-kiosk-countdown-label="Buka kembali dalam">
             <div class="queue-kiosk__break-modal-card">
                 <span class="queue-kiosk__break-modal-icon" aria-hidden="true">◷</span>
                 <p>MPP SIOLA</p>
-                <h2 id="kiosk-break-title">Jeda Istirahat Salat Jumat</h2>
-                <strong>Pengambilan nomor antrean dihentikan sementara.</strong>
+                <h2 id="kiosk-break-title">{{ $kioskOperationalMessage['title'] }}</h2>
+                <strong>{{ $kioskOperationalMessage['body'] }}</strong>
                 <span>Pelayanan dan pengambilan nomor dibuka kembali pukul {{ $kioskBreak['ends_at']->format('H.i') }} WIB.</span>
                 <div class="queue-kiosk__break-countdown" data-kiosk-break-countdown>Memuat waktu…</div>
-                <small>Silakan kembali setelah waktu buka kembali.</small>
+                <small>{{ $kioskOperationalMessage['footer'] }}</small>
+            </div>
+        </section>
+    @elseif ($kioskPreOpening ?? false)
+        <section class="queue-kiosk__break-modal" role="alertdialog" aria-modal="true" aria-labelledby="kiosk-pre-opening-title" data-kiosk-break-until="{{ $kioskPreOpening['opens_at']->toIso8601String() }}" data-kiosk-countdown-label="Dimulai dalam">
+            <div class="queue-kiosk__break-modal-card">
+                <img class="queue-kiosk__closure-logo" src="{{ $mppBranding['logo_url'] }}" alt="Logo {{ $mppBranding['name'] }}">
+                <p>MPP SIOLA</p>
+                <h2 id="kiosk-pre-opening-title">{{ $kioskOperationalMessage['title'] }}</h2>
+                <strong>{{ $kioskOperationalMessage['body'] }}</strong>
+                <div class="queue-kiosk__break-countdown" data-kiosk-break-countdown>Memuat waktu…</div>
+                <small>{{ $kioskOperationalMessage['footer'] }}</small>
             </div>
         </section>
     @elseif ($kioskOperationalClosure ?? false)
@@ -402,13 +413,13 @@
             <div class="queue-kiosk__break-modal-card">
                 <img class="queue-kiosk__closure-logo" src="{{ $mppBranding['logo_url'] }}" alt="Logo {{ $mppBranding['name'] }}">
                 <p>MPP SIOLA</p>
-                <h2 id="kiosk-closure-title">Pelayanan Hari Ini Telah Selesai</h2>
-                <strong>Pengambilan nomor antrean untuk hari ini telah ditutup.</strong>
+                <h2 id="kiosk-closure-title">{{ $kioskOperationalMessage['title'] }}</h2>
+                <strong>{{ $kioskOperationalMessage['body'] }}</strong>
                 <span>Pelayanan kembali dibuka</span>
                 <div class="queue-kiosk__break-countdown">
                     {{ $kioskOperationalClosure['opens_at']->locale('id')->translatedFormat('l') }} · pukul {{ $kioskOperationalClosure['opens_at']->format('H.i') }} WIB
                 </div>
-                <small>Terima kasih atas pengertian Anda.</small>
+                <small>{{ $kioskOperationalMessage['footer'] }}</small>
             </div>
         </section>
     @endif

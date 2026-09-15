@@ -2,9 +2,10 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\OnlineQueueReservation;
 use App\Models\OnlineQueueSession;
-use App\Models\OnlineQueueSpecialWindow;
 use App\Models\OnlineQueueSetting;
+use App\Models\OnlineQueueSpecialWindow;
 use App\Models\Service;
 use App\Services\OnlineQueueScheduleService;
 use App\Support\TimeOptions;
@@ -12,6 +13,7 @@ use Filament\Actions\Action;
 use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Database\Eloquent\Collection;
 
 class OnlineQueuePreview extends Page
 {
@@ -35,6 +37,38 @@ class OnlineQueuePreview extends Page
 
     public ?int $editingSpecialWindowId = null;
 
+    /** @return array<string, array<int, string>> */
+    public function pilotServiceOptions(): array
+    {
+        return Service::query()
+            ->with([
+                'instansi',
+                'counters' => fn ($query) => $query
+                    ->withoutGlobalScopes()
+                    ->where('is_active', true)
+                    ->where('is_archived', false)
+                    ->orderBy('code_loket'),
+            ])
+            ->where('is_active', true)
+            ->where('is_archived', false)
+            ->orderBy('instansi_id')
+            ->orderBy('name')
+            ->orderBy('prefix')
+            ->get()
+            ->groupBy(fn (Service $service): string => $service->instansi?->nama_instansi ?? 'Tanpa instansi')
+            ->map(fn ($services): array => $services->mapWithKeys(fn (Service $service): array => [
+                $service->id => collect([
+                    $service->instansi?->nama_instansi,
+                    $service->name,
+                    $service->prefix ? 'Kode antrean '.$service->prefix : null,
+                    $service->counters->isNotEmpty()
+                        ? 'Loket '.$service->counters->pluck('code_loket')->filter()->map(fn ($code): string => mb_strtoupper((string) $code))->implode(', ')
+                        : null,
+                ])->filter()->implode(' · '),
+            ])->all())
+            ->all();
+    }
+
     public function selectTab(string $tab): void
     {
         if (in_array($tab, ['dashboard', 'sessions', 'participants', 'checkin', 'links', 'settings'], true)) {
@@ -57,6 +91,41 @@ class OnlineQueuePreview extends Page
     public function getOnlineSettingsProperty(): OnlineQueueSetting
     {
         return OnlineQueueSetting::current();
+    }
+
+    /** @return array{total:int,booked:int,checked_in:int} */
+    public function getDashboardReservationStatsProperty(): array
+    {
+        $counts = OnlineQueueReservation::query()
+            ->whereDate('service_date', today('Asia/Jakarta'))
+            ->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        return [
+            'total' => (int) $counts->sum(),
+            'booked' => (int) ($counts[OnlineQueueReservation::STATUS_BOOKED] ?? 0),
+            'checked_in' => (int) ($counts[OnlineQueueReservation::STATUS_CHECKED_IN] ?? 0),
+        ];
+    }
+
+    /** @return array{count:int,logs:Collection<int, OnlineQueueReservation>} */
+    public function getIdentityVerificationSummaryProperty(): array
+    {
+        $now = now('Asia/Jakarta');
+
+        return [
+            'count' => OnlineQueueReservation::query()
+                ->whereNotNull('identity_verified_at')
+                ->whereYear('identity_verified_at', $now->year)
+                ->whereMonth('identity_verified_at', $now->month)
+                ->count(),
+            'logs' => OnlineQueueReservation::query()
+                ->where('identity_verification_status', '!=', 'not_checked')
+                ->latest('identity_verified_at')
+                ->limit(5)
+                ->get(),
+        ];
     }
 
     public function getSessionsProperty()
@@ -116,9 +185,13 @@ class OnlineQueuePreview extends Page
                 ->form([
                     Forms\Components\Select::make('pilot_service_ids')
                         ->label('Layanan pilot')
-                        ->options(Service::query()->where('is_active', true)->where('is_archived', false)->orderBy('name')->pluck('name', 'id'))
-                        ->multiple()->searchable()->preload()->required()
-                        ->helperText('Hanya layanan ini yang dapat muncul pada formulir booking.'),
+                        ->options(fn (): array => $this->pilotServiceOptions())
+                        ->multiple()
+                        ->searchable()
+                        ->preload()
+                        ->placeholder('Pilih instansi, layanan, atau kode loket')
+                        ->noSearchResultsMessage('Layanan tidak ditemukan. Coba cari nama instansi atau kode loket.')
+                        ->helperText('Kosong diperbolehkan saat pilot belum aktif. Nama instansi dan kode ditampilkan agar layanan yang namanya sama tidak tertukar.'),
                     Forms\Components\TextInput::make('booking_window_days')
                         ->label('Jendela reservasi')->suffix('hari')->numeric()->minValue(1)->maxValue(30)->required(),
                     Forms\Components\Toggle::make('activate')
@@ -131,6 +204,7 @@ class OnlineQueuePreview extends Page
                     $serviceIds = array_values(array_unique(array_map('intval', $data['pilot_service_ids'] ?? [])));
                     if (($data['activate'] ?? false) && $serviceIds === []) {
                         Notification::make()->title('Pilih minimal satu layanan pilot')->danger()->send();
+
                         return;
                     }
 
@@ -228,13 +302,30 @@ class OnlineQueuePreview extends Page
                 ->icon('heroicon-o-chart-bar-square')
                 ->color('success')
                 ->form([
-                    Forms\Components\DatePicker::make('from')->label('Dari tanggal')->native(false)->closeOnDateSelection()->default(now('Asia/Jakarta')->startOfMonth())->required(),
-                    Forms\Components\DatePicker::make('to')->label('Sampai tanggal')->native(false)->closeOnDateSelection()->default(now('Asia/Jakarta'))->required()->afterOrEqual('from'),
+                    Forms\Components\DatePicker::make('from')->label('Dari tanggal')->native(false)->closeOnDateSelection()->live()->default(now('Asia/Jakarta')->startOfMonth())->required(),
+                    Forms\Components\DatePicker::make('to')->label('Sampai tanggal')->native(false)->closeOnDateSelection()->live()->default(now('Asia/Jakarta'))->required()->afterOrEqual('from'),
                     Forms\Components\Select::make('service_id')->label('Layanan')->options(
                         Service::query()->where('is_active', true)->where('is_archived', false)->orderBy('name')->pluck('name', 'id')
-                    )->searchable()->placeholder('Semua layanan'),
+                    )->searchable()->live()->placeholder('Semua layanan'),
                 ])
                 ->modalDescription('Ekspor membedakan antrean langsung dan antrean online yang sudah hadir berdasarkan sumber data, bukan prefix nomor.')
+                ->extraModalFooterActions(function (Action $action): array {
+                    return [
+                        $action->makeModalAction('previewChannelRecapPdf')
+                            ->label('Preview PDF')
+                            ->icon('heroicon-o-document-text')
+                            ->color('danger')
+                            ->url(function (self $livewire): string {
+                                $data = $livewire->mountedActionsData[array_key_last($livewire->mountedActionsData)] ?? [];
+
+                                return route('preview.queue-channel-recap-pdf', [
+                                    'from' => $data['from'] ?? now('Asia/Jakarta')->startOfMonth()->toDateString(),
+                                    'to' => $data['to'] ?? now('Asia/Jakarta')->toDateString(),
+                                    'service_id' => $data['service_id'] ?? null,
+                                ]);
+                            }, shouldOpenInNewTab: true),
+                    ];
+                })
                 ->action(function (array $data) {
                     return redirect()->route('export.queue-channel-recap', [
                         'from' => $data['from'],
@@ -331,5 +422,4 @@ class OnlineQueuePreview extends Page
     {
         return static::canAccess();
     }
-
 }
